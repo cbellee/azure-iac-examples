@@ -1,0 +1,40 @@
+parameters:
+   - name: azureServiceConnection
+     type: string
+   - name: appName
+     type: string
+   - name: vmImageName
+     type: string
+   - name: tag
+     type: string
+     default: '$(Build.BuildId)'
+
+jobs:
+  - job: ContainerAppProvisionJob
+    displayName: Container App Provision job
+    variables:
+    - name: resourceGroupName
+      value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.resourceGroupName']]
+    - name: acrName
+      value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.acrName']]
+    - name: acaEnvironmentName
+      value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.acaEnvironmentName']]
+    - name: umidId
+      value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.umidId']]
+
+    pool:
+      vmImage: ${{ parameters.vmImageName }}
+    steps:
+
+    - checkout: self 
+
+    - task: AzureCLI@2
+      displayName: 'BuildAndPushContainerImage'
+      enabled: true
+      inputs:
+        azureSubscription: ${{ parameters.azureServiceConnection }}
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          az acr build --registry $(acrName) -t "$(acrName).azurecr.io/${{ parameters.appName }}:${{ parameters.tag }}" .
+

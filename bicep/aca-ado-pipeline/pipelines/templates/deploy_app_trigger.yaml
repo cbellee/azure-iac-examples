@@ -1,0 +1,74 @@
+# Explicitly set none for repositry trigger
+trigger: 
+  - 'none'
+
+variables:
+  - name: azureFederatedServiceConnection
+    value: Workload-Federation-AIRS-Subscription
+  - name: azureARMServiceConnection
+    value: Service-Principal-AIRS-Subscription
+  - name: acrName
+    value: acaadodemoacrokeaheyrau2vu
+  - name: resourceGroupName
+    value: acaadodemo-australiaeast-rg
+  - name: appName
+    value: colour-app
+  - name: umidId
+    value: '/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/acaadodemo-australiaeast-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/acaadodemoacrokeaheyrau2vu-acrpull-umid'
+  - name: containerPort
+    value: 80
+  - name: acaEnvironmentName
+    value: acaadodemo-env-okeaheyrau2vu
+  - name: umidId
+    value: 80
+  - name: colour
+    value: blue
+  - name: minReplicas
+    value: 2
+  - name: maxReplicas
+    value: 6
+
+resources:
+  containers:
+  - container: mycontainer
+    type: ACR  
+    azureSubscription: $(azureARMServiceConnection)
+    resourceGroup: $(resourceGroupName)
+    registry: $(acrName)
+    repository: $(appName)
+    trigger: true # Triggers aren't enabled by default and need to be set explicitly
+      # enabled: true # set to 'true' to trigger on all image tags if 'tags' is unset.
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+- task: AzureCLI@2
+  name: 'ContainerAppDeployTrigger'
+  displayName: 'Container App Deploy Trigger Task'
+  inputs:
+    azureSubscription: $(azureFederatedServiceConnection)
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      az containerapp create \
+        --name $(appName) \
+        --image $(resources.container.mycontainer.registry).azurecr.io/$(appName):$(resources.container.mycontainer.tag) \
+        --ingress external \
+        --user-assigned $(umidId) \
+        --registry-identity $(umidId) \
+        --registry-server "$(acrName).azurecr.io" \
+        --resource-group $(resourceGroupName) \
+        --environment $(acaEnvironmentName) \
+        --target-port $(containerPort) \
+        --env-vars COLOUR=$(colour) VERSION=$(resources.container.mycontainer.tag) \
+        --min-replicas $(minReplicas) \
+        --max-replicas $(maxReplicas) \
+        --revisions-mode 'multiple'
+
+      #az container create \
+      #  -g $(resources.container.app.resourceGroup) \
+      #  -n $(appName) \
+      #  --image $(resources.container.app.registry).azurecr.io/sampleapp:$(resources.container.app.tag) \
+      #  --registry-username <username> --registry-password <password> --location <location> \
+      #  --ports 80 443 --dns-name-label sampleapp 

@@ -1,0 +1,58 @@
+trigger:
+  branches:
+    include:
+    - main
+
+variables:
+  - name: azureServiceConnection
+    value: 'Workload-Federation-AIRS-Subscription'
+  - name: appName
+    value: 'colour-app'
+  - name: vmImageName
+    value: 'ubuntu-latest'
+  - name: location
+    value: 'australiaeast' 
+  - name: prefix
+    value: 'acaadodemo'
+  - name: containerPort
+    value: '80'
+  - name: colour
+    value: 'blue'
+
+stages:
+  - stage: InfraDeploymentStage
+    displayName: Infrastructure Deployment stage
+    jobs:
+      - template: templates/deploy_infra.yaml
+        parameters:
+          azureServiceConnection: $(azureServiceConnection)
+          vmImageName: $(vmImageName)
+          location: $(location)
+          prefix: $(prefix)
+    
+  - stage: ContainerAppBuildAndPushStage
+    dependsOn: 
+      - InfraDeploymentStage
+    displayName: 'Container App Build & Push Stage'
+    jobs:
+      - template: templates/build_app.yaml
+        parameters:
+          azureServiceConnection: $(azureServiceConnection)
+          appName: $(appName)
+          vmImageName: $(vmImageName)
+
+  - stage: ContainerAppDeployStage
+    dependsOn: 
+      - ContainerAppBuildAndPushStage
+      - InfraDeploymentStage
+    displayName: Container App Deployment stage
+    jobs:
+      - template: templates/deploy_app.yaml
+        parameters:
+          azureServiceConnection: $(azureServiceConnection)
+          appName: $(appName)
+          containerPort: $(containerPort)
+          vmImageName: $(vmImageName)
+          colour: $(colour)
+          minReplicas: 2
+          maxReplicas: 6

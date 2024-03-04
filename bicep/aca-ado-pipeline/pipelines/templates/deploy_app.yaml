@@ -1,0 +1,60 @@
+parameters:
+   - name: azureServiceConnection
+     type: string
+   - name: appName
+     type: string
+   - name: containerPort
+     type: string
+   - name: vmImageName
+     type: string
+   - name: colour
+     type: string
+   - name: tag
+     type: string
+     default: '$(Build.BuildId)'
+   - name: minReplicas
+     type: string
+   - name: maxReplicas
+     type: string
+
+jobs:
+  - job: ContainerAppProvisionJob
+    displayName: Container App Provision job
+    variables:
+    - name: resourceGroupName
+      value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.resourceGroupName']]
+    - name: acrName
+      value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.acrName']]
+    - name: acaEnvironmentName
+      value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.acaEnvironmentName']]
+    - name: umidId
+      value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.umidId']]
+
+    pool:
+      vmImage: ${{ parameters.vmImageName }}
+    steps:
+
+    - checkout: self 
+
+    - task: AzureCLI@2
+      displayName: 'CreateContainerApp'
+      enabled: true
+      inputs:
+        azureSubscription:  ${{ parameters.azureServiceConnection }}
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          az containerapp create \
+            --name ${{ parameters.appName }} \
+            --image "$(acrName).azurecr.io/${{ parameters.appName }}:${{ parameters.tag }}" \
+            --ingress external \
+            --user-assigned $(umidId) \
+            --registry-identity $(umidId) \
+            --registry-server "$(acrName).azurecr.io" \
+            --resource-group $(resourceGroupName) \
+            --environment $(acaEnvironmentName) \
+            --target-port ${{ parameters.containerPort }} \
+            --env-vars COLOUR=${{ parameters.colour }} VERSION=${{ parameters.tag }} \
+            --min-replicas ${{ parameters.minReplicas }} \
+            --max-replicas ${{ parameters.maxReplicas }} \
+            --revisions-mode 'multiple'
