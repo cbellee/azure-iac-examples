@@ -2,13 +2,13 @@
 
 ## Overview
 
-This example demonstrates how to deploy a containerized application to Azure Container Apps using Azure DevOps. The pipeline consists of a parent '/pipelines/main.yaml' template which executes three child templates describe below.
+This example demonstrates how to deploy a containerized application to Azure Container Apps using Azure DevOps. The pipeline consists of a parent `/pipelines/main.yaml` template which executes three child templates describe below.
 
-- /pipelines/infra_deploy.yaml
+- `/pipelines/infra_deploy.yaml`
   - This template creates the Azure Container Apps infrastructure using Azure Bicep templates
-- /pipelines/templates/app_build.yaml
+- `/pipelines/templates/app_build.yaml`
   - This template builds the container image and pushes it to Azure Container Registry.
-- /pipelines/templates/app_deploy.yaml
+- `/pipelines/templates/app_deploy.yaml`
   - This template deploys the containerized application to Azure Container Apps.
 
 ## Prerequisites
