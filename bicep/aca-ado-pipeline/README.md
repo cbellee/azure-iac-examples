@@ -19,7 +19,7 @@ This example demonstrates how to deploy a containerized application to Azure Con
   - If you don't have an organization, you can sign up for free at [Azure DevOps](https://dev.azure.com/?WT.mc_id=DOP-MVP-5001511).
 - Azure DevOps service connection.
   - Create a service connection to your Azure subscription. For more information, see [Create an Azure service connection](https://go.microsoft.com/fwlink/?LinkId=623000).
-  - Ensure the service connection has the 'Owner' RBAC role assigned at the subscription level. Ideally, use the Federated Identity option for the service connection type (the current default option in the Azure DevOps UI).
+  - Ensure the service connection has the 'Owner' RBAC role assigned at the subscription level. Ideally, use the [Federated Identity option](https://learn.microsoft.com/en-gb/azure/devops/pipelines/library/connect-to-azure?view=azure-devops#create-an-azure-resource-manager-service-connection-using-workload-identity-federation) for the service connection type (the current default option in the Azure DevOps UI).
 
 ## Setup
 
