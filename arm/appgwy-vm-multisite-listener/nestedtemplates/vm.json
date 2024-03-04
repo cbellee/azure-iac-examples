@@ -1,0 +1,189 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "name": {
+            "type": "string"
+        },
+        "suffix": {
+            "type": "string"
+        },
+        "subnetId": {
+            "type": "string"
+        },
+        "userName": {
+            "type": "string",
+            "defaultValue": "localadmin"
+        },
+        "sshPublicKey": {
+            "type": "string"
+        },
+        "osType": {
+            "type": "string",
+            "defaultValue": "Linux"
+        },
+        "vmSize": {
+            "type": "string",
+            "defaultValue": "Standard_F2s_v2"
+        },
+        "imageReference": {
+            "type": "object",
+            "defaultValue": {
+                "publisher": "Canonical",
+                "offer": "UbuntuServer",
+                "sku": "19.04",
+                "version": "latest"
+            }
+        },
+        "storageAccountType": {
+            "type": "string",
+            "defaultValue": "Premium_LRS"
+        },
+        "diskSizeGB": {
+            "type": "int",
+            "defaultValue": 30
+        },
+        "storageUri": {
+            "type": "string"
+        },
+        "sasToken": {
+            "type": "string"
+        },
+        "tags": {
+            "type": "object"
+        }
+    },
+    "variables": {
+        "vmName": "[concat(parameters('name'), '-', parameters('suffix'))]",
+        "nicName": "[concat(parameters('name'), '-nic-', parameters('suffix'))]",
+        "pipName": "[concat(parameters('name'), '-pip-', parameters('suffix'))]",
+        "osDiskName": "[concat(parameters('name'), '-osDisk-', parameters('suffix'))]",
+        "customData": "[concat('#include\n', concat(parameters('storageUri'), '/', 'Cloud-Init.txt', parameters('sasToken')))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2019-08-01",
+            "name": "[variables('pipName')]",
+            "location": "[resourceGroup().location]",
+            "tags": "[parameters('tags')]",
+            "sku": {
+                "name": "Standard",
+                "tier": "Regional"
+            },
+            "properties": {
+                "publicIPAddressVersion": "IPv4",
+                "publicIPAllocationMethod": "Static",
+                "idleTimeoutInMinutes": 4,
+                "ipTags": [
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2019-08-01",
+            "name": "[variables('nicName')]",
+            "location": "[resourceGroup().location]",
+            "tags": "[parameters('tags')]",
+            "dependsOn": [
+                "[variables('pipName')]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig1",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+                            },
+                            "subnet": {
+                                "id": "[parameters('subnetId')]"
+                            },
+                            "primary": true,
+                            "privateIPAddressVersion": "IPv4"
+                            /* "applicationGatewayBackendAddressPools": [
+                                {
+                                    "id": "[concat(resourceId('Microsoft.Network/applicationGateways', 'app-gwy-v2'), '/backendAddressPools/vm-bepool-1')]"
+                                }
+                            ] */
+                        }
+                    }
+                ],
+                "dnsSettings": {
+                    "dnsServers": [
+                    ]
+                },
+                "enableAcceleratedNetworking": false,
+                "enableIPForwarding": false
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2019-03-01",
+            "name": "[variables('vmName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[variables('nicName')]"
+            ],
+            "tags": "[union(parameters('tags'),json('{\"autoStart\":\"true\", \"autoStop\":\"true\"}'))]",
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('vmSize')]"
+                },
+                "storageProfile": {
+                    "imageReference": "[parameters('imageReference')]",
+                    "osDisk": {
+                        "osType": "[parameters('osType')]",
+                        "name": "[variables('osDiskName')]",
+                        "createOption": "FromImage",
+                        "caching": "ReadWrite",
+                        "managedDisk": {
+                            "storageAccountType": "[parameters('storageAccountType')]"
+                        },
+                        "diskSizeGB": "[parameters('diskSizeGB')]"
+                    },
+                    "dataDisks": [
+                    ]
+                },
+                "osProfile": {
+                    "computerName": "[variables('vmName')]",
+                    "adminUsername": "[parameters('userName')]",
+                    "customData": "[base64(variables('customData'))]",
+                    "linuxConfiguration": {
+                        "disablePasswordAuthentication": true,
+                        "ssh": {
+                            "publicKeys": [
+                                {
+                                    "path": "[concat('/home/', parameters('userName'), '/.ssh/authorized_keys')]",
+                                    "keyData": "[parameters('sshPublicKey')]"
+                                }
+                            ]
+                        },
+                        "provisionVMAgent": true
+                    },
+                    "secrets": [
+                    ],
+                    "allowExtensionOperations": true
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+                        }
+                    ]
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "vmPublicIp": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Network/publicIpAddresses', variables('pipName'))).ipAddress]"
+        },
+        "vmPrivateIp": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))).ipConfigurations[0].properties.privateIPAddress]"
+        }
+    }
+}

@@ -1,0 +1,51 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vNets": {
+            "value": [
+                {
+                    "name": "aks-vnet",
+                    "addressPrefixes": [
+                        "10.110.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "aksSubnet",
+                            "addressPrefix": "10.110.1.0/24"
+                        },
+                        {
+                            "name": "vmSubnet",
+                            "addressPrefix": "10.110.2.0/24"
+                        },
+                        {
+                            "name": "dbSubnet",
+                            "addressPrefix": "10.110.3.0/24"
+                        }
+                    ]
+                }
+            ]
+        },
+        "storageUri": {
+            "value": null
+        },
+        "sasToken": {
+            "value": null
+        },
+        "tags": {
+            "value": {
+                "costCenter": "123456789",
+                "dept": "it"
+            }
+        },
+        "aksVersion": {
+            "value": "1.14.6"
+        },
+        "aksNodeCount": {
+            "value": 3
+        },
+        "aksNodeVMSize": {
+            "value": "Standard_D4s_v3"
+        }
+    }
+}

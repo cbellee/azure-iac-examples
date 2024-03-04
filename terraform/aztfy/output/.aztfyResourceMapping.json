@@ -1,0 +1,13 @@
+{
+	"/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/aztfydemo-rg": "azurerm_resource_group.res-10",
+	"/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/aztfydemo-rg/providers/Microsoft.ContainerRegistry/registries/aztfydemoacro2fzihlnc5e6m": "azurerm_container_registry.res-0",
+	"/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/aztfydemo-rg/providers/Microsoft.ContainerRegistry/registries/aztfydemoacro2fzihlnc5e6m/scopeMaps/_repositories_admin": "azurerm_container_registry_scope_map.res-2",
+	"/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/aztfydemo-rg/providers/Microsoft.ContainerRegistry/registries/aztfydemoacro2fzihlnc5e6m/scopeMaps/_repositories_pull": "azurerm_container_registry_scope_map.res-3",
+	"/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/aztfydemo-rg/providers/Microsoft.ContainerRegistry/registries/aztfydemoacro2fzihlnc5e6m/scopeMaps/_repositories_push": "azurerm_container_registry_scope_map.res-4",
+	"/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/aztfydemo-rg/providers/Microsoft.ContainerService/managedClusters/aks-aztfydemo": "azurerm_kubernetes_cluster.myaks",
+	"/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/aztfydemo-rg/providers/Microsoft.ContainerService/managedClusters/aks-aztfydemo/agentPools/linux": "azurerm_kubernetes_cluster_node_pool.res-8",
+	"/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/aztfydemo-rg/providers/Microsoft.ContainerService/managedClusters/aks-aztfydemo/agentPools/system": "azurerm_kubernetes_cluster_node_pool.res-9",
+	"/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/aztfydemo-rg/providers/Microsoft.Network/virtualNetworks/aztfydemo-vnet": "azurerm_virtual_network.res-1",
+	"/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/aztfydemo-rg/providers/Microsoft.Network/virtualNetworks/aztfydemo-vnet/subnets/aks-system-subnet": "azurerm_subnet.res-5",
+	"/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/aztfydemo-rg/providers/Microsoft.Network/virtualNetworks/aztfydemo-vnet/subnets/aks-user-subnet": "azurerm_subnet.res-6"
+}

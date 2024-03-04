@@ -1,0 +1,49 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentMode": {
+            "value": "Incremental"
+        },
+        "aksVersion": {
+            "value": "1.16.9"
+        },
+        "aksVnetName": {
+            "value": null
+        },
+        "aksSubnetName": {
+            "value": null
+        },
+        "firewallSubnetName": {
+            "value": null
+        },
+        "aksNodeVmSize": {
+            "value": "Standard_D2_v2"
+        },
+        "aksNodeCount": {
+            "value": 1
+        },
+        "aksMaxPodCount": {
+            "value": 30
+        },
+        "tags": {
+            "value": {
+                "environment": "dev",
+                "costCenter": "123456789",
+                "dept": "it"
+            }
+        },
+        "sshPublicKey": {
+            "value": null
+        },
+        "aadAdminGroupObjectId": {
+            "value": null
+        },
+        "storageUri": {
+            "value": null
+        },
+        "sasToken": {
+            "value": null
+        }
+    }
+}

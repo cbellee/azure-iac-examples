@@ -1,0 +1,7 @@
+$env:CLIENT_ID='a3e5fa2d-2a80-4700-ab64-8a6c76ba09e6'
+$env:TENANT_NAME='kainiindustries.net'
+$env:PFX_FILE_PATH='C:\Users\cbellee\repos\github.com\cbellee\azure-iac-examples\bicep\appgwy-apim-int-ext\certs\clientCertNoRoot.pfx'
+$env:CERT_PASSWORD='M1cr0soft123'
+$env:SCOPE='api://42062d86-350e-448b-9c2e-528ec1e8cde9/.default'
+$env:BACKEND_API_URI='api://42062d86-350e-448b-9c2e-528ec1e8cde9'
+$env:API_URI='https://api.kainiindustries.net/external/api'

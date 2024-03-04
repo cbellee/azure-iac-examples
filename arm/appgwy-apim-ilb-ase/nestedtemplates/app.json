@@ -1,0 +1,124 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "webAppName": {
+            "type": "string"
+        },
+        "azure_devops": {
+            "defaultValue": "true",
+            "type": "string"
+        },
+        "appInsightsLocation": {
+            "type": "string"
+        },
+        "hostingPlanId": {
+            "type": "string"
+        },
+        "aseName": {
+            "type": "string"
+        },
+        "containerRegistryName": {
+            "type": "string"
+        },
+        "containerImageName": {
+            "type": "string",
+            "defaultValue": "appsvc/dotnetcore"
+        },
+        "containerRegistryResourceGroup": {
+            "type": "string"
+        },
+        "startupCommand": {
+            "defaultValue": "",
+            "type": "string"
+        }
+    },
+    "variables": {
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Insights/components",
+            "name": "[tolower(parameters('webAppName'))]",
+            "apiVersion": "2014-04-01",
+            "location": "[parameters('appInsightsLocation')]",
+            "tags": {
+                "[concat('hidden-link:', resourceGroup().id, '/providers/Microsoft.Web/sites/', tolower(parameters('webAppName')))]": "Resource"
+            },
+            "properties": {
+                "applicationId": "[tolower(parameters('webAppName'))]",
+                "Request_Source": "AzureTfsExtensionAzureProject"
+            }
+        },
+        {
+            "type": "Microsoft.Web/sites",
+            "name": "[tolower(parameters('webAppName'))]",
+            "apiVersion": "2016-08-01",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('microsoft.insights/components/', tolower(parameters('webAppName')))]"
+            ],
+            "tags": {
+                "[concat('hidden-related:', parameters('hostingPlanId'))]": "empty"
+            },
+            "resources": [
+                {
+                    "apiVersion": "2016-08-01",
+                    "type": "config",
+                    "name": "web",
+                    "dependsOn": [
+                        "[tolower(parameters('webAppName'))]"
+                    ],
+                    "properties": {
+                    }
+                }
+            ],
+            "properties": {
+                "name": "[tolower(parameters('webAppName'))]",
+                "siteConfig": {
+                    "appSettings": [
+                        {
+                            "name": "azure_devops",
+                            "value": "[parameters('azure_devops')]"
+                        },
+                       /*  {
+                            "name": "DOCKER_REGISTRY_SERVER_URL",
+                            "value": "[concat('https://', reference(resourceId(parameters('containerRegistryResourceGroup'), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2017-10-01').loginServer)]"
+                        },
+                        {
+                            "name": "DOCKER_REGISTRY_SERVER_USERNAME",
+                            "value": "[listCredentials(resourceId(parameters('containerRegistryResourceGroup'), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2017-10-01').username]"
+                        },
+                        {
+                            "name": "DOCKER_REGISTRY_SERVER_PASSWORD",
+                            "value": "[listCredentials(resourceId(parameters('containerRegistryResourceGroup'), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2017-10-01').passwords[0].value]"
+                        }, */
+                        {
+                            "name": "DOCKER_CUSTOM_IMAGE_NAME",
+                            "value": "[concat(reference(resourceId(parameters('containerRegistryResourceGroup'), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2017-10-01').loginServer, '/', parameters('containerImageName'))]"
+                        },
+                        {
+                            "name": "WEBSITES_ENABLE_APP_SERVICE_STORAGE",
+                            "value": "false"
+                        },
+                        {
+                            "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+                            "value": "[reference(resourceId('microsoft.insights/components/', tolower(parameters('webAppName'))), '2015-05-01').InstrumentationKey]"
+                        }
+                    ],
+                    "appCommandLine": "[parameters('startupCommand')]",
+                    "linuxFxVersion": "[concat('DOCKER|', parameters('containerImageName'))]"
+                    //"linuxFxVersion": "[concat('DOCKER|', reference(resourceId(parameters('containerRegistryResourceGroup'), 'Microsoft.ContainerRegistry/registries', parameters('containerRegistryName')), '2017-10-01').loginServer, '/', parameters('containerImageName'))]"
+                },
+                //"serverFarmId": "[concat('/subscriptions/', subscription().subscriptionId,'/resourcegroups/', resourceGroup().name, '/providers/Microsoft.Web/serverfarms/', tolower(parameters('hostingPlanName')))]",
+                "serverFarmId": "[parameters('hostingPlanId')]",
+                "hostingEnvironmentProfile": {
+                    "id": "[resourceId('Microsoft.Web/hostingEnvironments', parameters('aseName'))]"
+                }
+            }
+        }
+    ],
+    "outputs": {
+    },
+    "functions": [
+    ]
+}

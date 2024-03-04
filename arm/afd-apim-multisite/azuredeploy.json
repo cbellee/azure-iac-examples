@@ -1,0 +1,141 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentMode": {
+            "type": "string",
+            "allowedValues": [
+                "Incremental",
+                "Complete"
+            ],
+            "defaultValue": "Incremental"
+        },
+        "storageUri": {
+            "type": "string"
+        },
+        "tags": {
+            "type": "object"
+        },
+        "vNets": {
+            "type": "array"
+        },
+        "sasToken": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "resgpguid": "[substring(replace(guid(resourceGroup().id), '-', ''), 0, 6)]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "linkedTemplate-nsg",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'nsg.json', parameters('sasToken'))]"
+                },
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    }
+                }
+            }
+        },
+        {
+            "name": "[concat('linkedTemplate-vnet', '-', copyIndex())]",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2017-05-10",
+            "comments": "This deployment links to the gatewayVpn nested ARM template",
+            "dependsOn": [
+                "[concat('Microsoft.Resources/deployments/', 'linkedTemplate-nsg')]"
+            ],
+            "condition": true,
+            "resourceGroup": "[resourceGroup().name]",
+            "copy": {
+                "name": "vnetCopy",
+                "count": "[length(parameters('vNets'))]"
+            },
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    },
+                    "vNet": {
+                        "value": "[parameters('vNets')[copyIndex()]]"
+                    },
+                    "tags": {
+                        "value": "[parameters('tags')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'vnets.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "name": "linkedTemplate-peerings",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2017-05-10",
+            "comments": "This deployment links to the peerings nested ARM template",
+            "dependsOn": [
+                "vnetCopy"
+            ],
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    },
+                    "vNets": {
+                        "value": "[parameters('vNets')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'peerings.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "linkedTemplate-apim",
+            "dependsOn": [
+                "[concat('Microsoft.Resources/deployments/', 'linkedTemplate-peerings')]"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    },
+                    "apimSku": {
+                        "value": {
+                            "name": "Developer",
+                            "capacity": 1
+                        }
+                    },
+                    "subnetId": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[1].id]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'apim.json', parameters('sasToken'))]"
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "apimDnsName": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-apim').outputs.apimDnsName.value]"
+        }
+    }
+}

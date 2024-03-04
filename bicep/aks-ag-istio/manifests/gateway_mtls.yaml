@@ -1,0 +1,78 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: internal-gateway
+spec:
+  selector:
+    istio: aks-istio-ingressgateway-internal
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"
+    tls:
+      httpsRedirect: true
+  - port: 
+      number: 443
+      name: https
+      protocol: HTTPS
+    hosts:
+    - "*"
+    tls:
+      mode: SIMPLE # MUTUAL
+      credentialName: tls-cert
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: bookinfo-vs-internal
+spec:
+  gateways:
+  - internal-gateway
+  http:
+  - name: bookinfo-service
+    match:
+    - uri:
+        exact: /productpage
+    - uri:
+        prefix: /static
+    - uri:
+        exact: /login
+    - uri:
+        exact: /logout
+    - uri:
+        prefix: /api/v1/products
+    route:
+    - destination:
+        host: productpage
+        port:
+          number: 9080
+  - name: "health-check"
+    match: 
+    - uri: 
+       prefix: "/healthz/ready"
+    route:
+    - destination:  
+        host: aks-istio-ingressgateway-internal.aks-istio-ingress.svc.cluster.local
+        port:
+          number: 15021
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: go-mtls-vs-internal
+spec:
+  gateways:
+  - internal-gateway
+  http:
+  - name: go-mtls-service
+    match:
+    - uri:
+        exact: /hello
+    route:
+    - destination:
+        host: /hello
+        port:
+          number: 8443

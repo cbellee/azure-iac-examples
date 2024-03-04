@@ -1,0 +1,16 @@
+apiVersion: "aadpodidentity.k8s.io/v1"
+kind: AzureIdentity
+metadata:
+  name: azure-pod-id
+spec:
+  type: 0
+  ResourceID: "/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourcegroups/dev-aks-slb-flexvol-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/appgwContrIdentity-e9bd83"
+  ClientID: "42663fae-cf4e-4baf-a592-b960dedaaf10"
+---
+apiVersion: "aadpodidentity.k8s.io/v1"
+kind: AzureIdentityBinding
+metadata:
+  name: demo-azure-identity-binding
+spec:
+  AzureIdentity: azure-pod-id
+  Selector: azure-kv-identity

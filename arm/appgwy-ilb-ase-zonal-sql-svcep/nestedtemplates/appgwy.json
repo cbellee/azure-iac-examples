@@ -1,0 +1,258 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"suffix": {
+			"type": "string"
+		},
+		"location": {
+			"type": "string",
+			"defaultValue": "[resourceGroup().location]"
+		},
+		"keyVaultName": {
+			"type": "string"
+		},
+		"appGwyApplications": {
+			"type": "object",
+			"metadata": {
+				"description": "List of applications to configure. Each element format is: { name, hostName, backendAddresses, certificate: { data, password }, probePath }"
+			}
+		},
+		"appGwyZones": {
+			"defaultValue": "1,2,3",
+			"type": "string"
+		},
+		"subnetId": {
+			"type": "string"
+		},
+		"certificateId": {
+			"type": "string"
+		}
+	},
+	"variables": {
+		"appgwyName": "[concat('appgwyy', '-', parameters('suffix'))]",
+		"appgwyId": "[resourceId('Microsoft.Network/applicationGateways', variables('appgwyName'))]",
+		"appGatewayIdentityName": "appGatewayIdentity",
+		"appGatewayIdentityID": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('appGatewayIdentityName'))]",
+		"appgwyPublicIpAddressName": "[concat('appgwy-pip', '-', parameters('suffix'))]",
+		"appgwyPublicIpAddressId": "[resourceId('Microsoft.Network/publicIPAddresses', variables('appgwyPublicIpAddressName'))]",
+		"appgwyIpConfigName": "[concat(variables('appgwyName'), '-ipconfig')]",
+		"appgwyFrontendName": "[concat(variables('appgwyName'), '-frontend')]",
+		"appgwyBackendName": "[concat(variables('appgwyName'), '-backend-')]",
+		"appgwyHttpSettingsName": "[concat(variables('appgwyName'), '-httpsettings-')]",
+		"appgwyHealthProbeName": "[concat(variables('appgwyName'), '-healthprobe-')]",
+		"appgwyListenerName": "[concat(variables('appgwyName'), '-listener-')]",
+		"appgwyRouteRulesName": "[concat(variables('appgwyName'), '-routerules-')]",
+		"appgwyAutoScaleMinCapacity": 0,
+		"appgwyAutoScaleMaxCapacity": 10,
+		"appgwyZonesArray": "[if(empty(parameters('appgwyZones')),json('null'),split(parameters('appgwyZones'), ','))]"
+	},
+	"resources": [
+		{
+			"type": "Microsoft.Network/publicIPAddresses",
+			"apiVersion": "2019-11-01",
+			"name": "[variables('appgwyPublicIpAddressName')]",
+			"location": "[parameters('location')]",
+			"sku": {
+				"name": "Standard"
+			},
+			"properties": {
+				"publicIPAllocationMethod": "Static"
+			}
+		},
+		{
+			"name": "[variables('appGatewayIdentityName')]",
+			"type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+			"apiVersion": "2018-11-30",
+			"location": "[resourceGroup().location]"
+		},
+		{
+			"type": "Microsoft.KeyVault/vaults",
+			"apiVersion": "2019-09-01",
+			"name": "[parameters('keyVaultName')]",
+			"location": "[resourceGroup().location]",
+			"dependsOn": [
+				"[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('appGatewayIdentityName'))]"
+			],
+			"properties": {
+				"sku": {
+					"name": "standard",
+					"family": "A"
+				},
+				"tenantId": "[reference(variables('appGatewayIdentityID')).tenantId]",
+				"accessPolicies": [
+					{
+						"tenantId": "[reference(variables('appGatewayIdentityID')).tenantId]",
+						"objectId": "[reference(variables('appGatewayIdentityID')).principalId]",
+						"permissions": {
+							"secrets": [
+								"get"
+							]
+						}
+					}
+				],
+				"enableSoftDelete": true
+			}
+		},
+		{
+			"type": "Microsoft.Network/applicationGateways",
+			"apiVersion": "2019-11-01",
+			"name": "[variables('appgwyName')]",
+			"location": "[parameters('location')]",
+			"dependsOn": [
+				"[variables('appgwyPublicIpAddressId')]",
+				"[variables('appGatewayIdentityName')]"
+			],
+			"zones": "[variables('appgwyZonesArray')]",
+			"identity": {
+				"type": "UserAssigned",
+				"userAssignedIdentities": {
+					"[variables('appGatewayIdentityID')]": {}
+				}
+			},
+			"tags": {},
+			"properties": {
+				"sku": {
+					"name": "WAF_v2",
+					"tier": "WAF_v2"
+				},
+				"gatewayIPConfigurations": [
+					{
+						"name": "[variables('appgwyIpConfigName')]",
+						"properties": {
+							"subnet": {
+								"id": "[parameters('subnetId')]"
+							}
+						}
+					}
+				],
+				"frontendIPConfigurations": [
+					{
+						"name": "[variables('appgwyFrontendName')]",
+						"properties": {
+							"PublicIPAddress": {
+								"id": "[variables('appgwyPublicIpAddressId')]"
+							}
+						}
+					}
+				],
+				"frontendPorts": [
+					{
+						"name": "port_443",
+						"properties": {
+							"Port": 443
+						}
+					}
+				],
+				"autoscaleConfiguration": {
+					"minCapacity": "[variables('appgwyAutoScaleMinCapacity')]",
+					"maxCapacity": "[variables('appgwyAutoScaleMaxCapacity')]"
+				},
+				"webApplicationFirewallConfiguration": {
+					"enabled": true,
+					"firewallMode": "Detection",
+					"ruleSetType": "OWASP",
+					"ruleSetVersion": "3.0"
+				},
+				"sslCertificates": [
+					{
+						"name": "appGatewaySslCert",
+						"properties": {
+							"keyVaultSecretId": "[parameters('certificateId')]"
+						}
+					}
+				],
+				"enableHttp2": false,
+				"backendAddressPools": [
+					{
+						"name": "[concat(variables('appgwyBackendName'), parameters('appGwyApplications').name)]",
+						"properties": {
+							"backendAddresses": "[parameters('appGwyApplications').backendAddresses]"
+						}
+					}
+				],
+				"backendHttpSettingsCollection": [
+					{
+						"name": "[concat(variables('appgwyHttpSettingsName'), parameters('appGwyApplications').name)]",
+						"properties": {
+							"Port": 443,
+							"Protocol": "Https",
+							"cookieBasedAffinity": "Disabled",
+							"pickHostNameFromBackendAddress": true,
+							"requestTimeout": 20,
+							"probe": {
+								"id": "[concat(variables('appgwyId'), '/probes/', variables('appgwyHealthProbeName'), parameters('appGwyApplications').name)]"
+							}
+						}
+
+					}
+				],
+				"httpListeners": [
+					{
+						"name": "[concat(variables('appgwyListenerName'), parameters('appGwyApplications').name)]",
+						"properties": {
+							"frontendIPConfiguration": {
+								"id": "[concat(variables('appgwyId'), '/frontendIPConfigurations/', variables('appgwyFrontendName'))]"
+							},
+							"frontendPort": {
+								"id": "[concat(variables('appgwyId'), '/frontendPorts/port_443')]"
+							},
+							"protocol": "Https",
+							"sslCertificate": {
+								"id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/sslCertificates/appGatewaySslCert')]"
+							},
+							"hostName": "[parameters('appGwyApplications').hostName]",
+							"requireServerNameIndication": true
+						}
+					}
+				],
+				"requestRoutingRules": [
+					{
+						"name": "[concat(variables('appgwyRouteRulesName'), parameters('appGwyApplications').name)]",
+						"properties": {
+							"RuleType": "Basic",
+							"httpListener": {
+								"id": "[concat(variables('appgwyId'), '/httpListeners/', variables('appgwyListenerName'), parameters('appGwyApplications').name)]"
+							},
+							"backendAddressPool": {
+								"id": "[concat(variables('appgwyId'), '/backendAddressPools/', variables('appgwyBackendName'), parameters('appGwyApplications').name)]"
+							},
+							"backendHttpSettings": {
+								"id": "[concat(variables('appgwyId'), '/backendHttpSettingsCollection/', variables('appgwyHttpSettingsName'), parameters('appGwyApplications').name)]"
+							}
+						}
+					}
+				],
+				"probes": [
+					{
+						"name": "[concat(variables('appgwyHealthProbeName'), parameters('appGwyApplications').name)]",
+						"properties": {
+							"protocol": "Https",
+							"path": "[parameters('appGwyApplications').probePath]",
+							"interval": 30,
+							"timeout": 30,
+							"unhealthyThreshold": 3,
+							"pickHostNameFromBackendHttpSettings": true,
+							"minServers": 0,
+							"match": {
+								"statusCodes": [
+									"200-399"
+								]
+							}
+						}
+					}
+				]
+			}
+		}
+	],
+	"outputs": {
+		"appgwyPublicIpAddress": {
+			"value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('appgwyPublicIpAddressName'))).ipAddress]",
+			"type": "string"
+		},
+		"appGatewayPublicIpAddressId": {
+			"type": "string",
+			"value": "[resourceId('Microsoft.Network/publicIPAddresses', variables('appgwyPublicIpAddressName'))]"
+		}
+	}
+}

@@ -1,0 +1,273 @@
+# Pipeline to deploy Network, AKS & Application Gateway Ingress Controller
+
+name: deployAzureResources
+
+# specific path build
+trigger:
+  branches:
+    include:
+    - master
+    - develop
+  paths:
+    include:
+    - arm/aks-agic/*
+    exclude:
+    - arm/aks-agic/azure-pipelines.yml
+
+variables:
+  # ADO_SERVICE_CONECTION_NAME: # set in variable group
+  # LOCATION: # set in variable group
+  - group: aks_arm_vars
+  - name: containerName
+    value: 'templates'
+  - name: timeStamp
+    value: $[format('{0:yyyy}-{0:MM}-{0:dd}-{0:HHmmss}', pipeline.startTime)]
+  - name: dnsResourceGroupName
+    value: external-dns-zones-rg
+  - name: zoneName
+    value: kainiindustries.net
+  - name: suffix
+    value: 'k8s-agic'
+  - name: aksVersion
+    value: 1.15.7
+  - name: aksNodeCount
+    value: 1
+  - name: maxPods
+    value: 50
+  - name: aksMinNodeCount
+    value: 1
+  - name: aksMaxNodeCount
+    value: 5
+  - name: aksNodeVMSize
+    value: Standard_F2s_v2
+  - name: applicationGatewaySku
+    value: WAF_v2
+
+stages:
+- stage: 'prerequisite_resources'
+  displayName: 'prerequisite resources'
+  variables:
+    environmentName: dev
+    projectName: "$(environmentName)-$(suffix)"
+    resourceGroupName: "$(projectName)-rg"
+    tags: '{"costCentre":"478132","project":"$(projectName)"}'
+  jobs:
+    - job: 'prerequisite_resource_job'
+      condition: false
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployACR'
+          displayName: 'Deploy Azure Container Registry'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(ADO_SERVICE_CONECTION_NAME)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./nestedtemplates/acr.json
+            location: $(LOCATION)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "acrDeployment-$(timeStamp)"
+            outputVariable: acrTemplateOutput
+        
+        - task: ARM Outputs@5
+          name: 'GetACRDeploymentOutput'
+          displayName: 'Get ACR Deployment Output'
+          enabled: true
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(ADO_SERVICE_CONECTION_NAME)
+            resourceGroupName: $(resourceGroupName)
+            whenLastDeploymentIsFailed: 'fail'
+            deploymentNameFilter: "acrDeployment-$(timeStamp)"
+
+        - task: AzureCLI@1
+          displayName: 'Build container image in ACR'
+          enabled: false
+          inputs:
+            azureSubscription: $(ADO_SERVICE_CONECTION_NAME)
+            scriptLocation: 'inlineScript'
+            inlineScript: 'az acr build --image $(Build.Repository.Name) --registry $(registryName) --file ./Dockerfile .'
+
+- stage: 'dev'
+  displayName: 'dev environment release'
+  variables:
+    environmentName: dev
+    projectName: "$(environmentName)-$(suffix)"
+    resourceGroupName: "$(projectName)-rg"
+    tags: '{"costCentre":"478132","project":"$(projectName)"}'
+  jobs:
+    - deployment: 
+      pool:
+        vmImage: 'ubuntu-latest'
+      environment: $(environmentName)
+      strategy:
+       runOnce:
+        deploy:
+          steps:
+          - checkout: self # needed to checkout repo!
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                $now = Get-Date
+                $sasTokenExpiry = $now.AddHours(2).ToString('u') -replace ' ','T'
+                Write-Host "##vso[task.setvariable variable=sasTokenExpiry;]$sasTokenExpiry"
+
+          - task: AzureResourceGroupDeployment@2
+            name: 'DeployStorage'
+            displayName: 'Deploy storage account for arm templates'
+            enabled: true
+            inputs:
+              action: Create Or Update Resource Group
+              azureSubscription: $(ADO_SERVICE_CONECTION_NAME)
+              resourceGroupName: $(resourceGroupName)
+              csmFile: ./nestedtemplates/storage.json
+              location: $(LOCATION)
+              templateLocation: Linked artifact
+              deploymentMode: Incremental
+              deploymentName: "storageDeployment-$(timeStamp)"
+              deploymentOutputs: storageDeploymentOutput
+              overrideParameters: -sasTokenExpiry $(sasTokenExpiry) -storageSku Standard_LRS -storageKind StorageV2 -tags $(tags) -containerName $(containerName)
+
+          -  task: PowerShell@2
+             displayName: 'Get Storage Deployment Outputs'
+             inputs:
+               targetType: 'inline'
+               script: |
+                  $outputs = '$(storageDeploymentOutput)' | ConvertFrom-Json
+                  foreach ($output in $outputs.PSObject.Properties) {
+                    Write-Host "$($output.Name) - $($output.Value.value)"
+                    Write-Host "##vso[task.setvariable variable=$($output.Name);]$($output.Value.value)" 
+                  }
+
+          - task: AzureCLI@1
+            displayName: 'Copy ARM template files to Azure blob storage'
+            enabled: true
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONECTION_NAME)
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az storage blob upload-batch -d $(containerName) -s ./templates/nested/ --pattern *.json --account-name $(storageAccountName)
+      
+          - task: AzureResourceGroupDeployment@2
+            name: 'deployResources'
+            displayName: 'Deploy resources'
+            enabled: true
+            inputs:
+              action: Create Or Update Resource Group
+              azureSubscription: $(ADO_SERVICE_CONECTION_NAME)
+              resourceGroupName: $(resourceGroupName)
+              csmFile: ./azuredeploy.json
+              csmParametersFile: ./azuredeploy.parameters.json
+              location: $(LOCATION)
+              templateLocation: Linked artifact
+              deploymentMode: Incremental
+              deploymentName: "resourceDeployment-$(timeStamp)"
+              overrideParameters: 
+                -aksMinNodeCount $(aksMinNodeCount)
+                -aksMaxNodeCount $(aksMaxNodeCount)
+                -storageUri $(storageContainerUri)
+                -sasToken $(storageAccountSasToken)
+                -aksVersion $(aksVersion)
+                -aksNodeCount $(aksNodeCount)
+                -aksNodeVMSize $(aksNodeVMSize)
+                -maxPods $(maxPods)
+                -aksServicePrincipalObjectId $(aksServicePrincipalObjectId)
+                -aksServicePrincipalAppId $(aksServicePrincipalAppId)
+                -aksServicePrincipalSecret $(aksServicePrincipalSecret)
+                -applicationGatewaySku $(applicationGatewaySku)
+
+          - task: ARM Outputs@5
+            name: 'GetResourceDeploymentOutput'
+            displayName: 'Get ARM Resource Deployment Output'
+            enabled: true
+            inputs:
+              ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+              ConnectedServiceNameARM: $(ADO_SERVICE_CONECTION_NAME)
+              resourceGroupName: $(resourceGroupName)
+              whenLastDeploymentIsFailed: 'fail'
+              deploymentNameFilter: "resourceDeployment-$(timeStamp)"
+
+          - task: PowerShell@2
+            displayName: 'Generate helm-config.yaml file'
+            inputs:
+              filePath: ./deploy-ingress/New-HelmConfigFile.ps1
+              arguments: 
+                -subscriptionId $(subscriptionId) 
+                -resourceGroupName $(resourceGroupName) 
+                -applicationGatewayName $(applicationGatewayName) 
+                -applicationGatewayIdentityResourceId $(applicationGatewayIdentityResourceId) 
+                -applicationGatewayIdentityClientId $(applicationGatewayIdentityClientId) 
+                -aksApiServerUri $(aksApiServerUri)
+
+          - task: HelmInstaller@1
+            enabled: false
+            inputs:
+              helmVersionToInstall: 'latest'
+
+          - task: Kubernetes@1
+            displayName: 'Kubectl version'
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(ADO_SERVICE_CONECTION_NAME)
+              azureResourceGroup: $(resourceGroupName)
+              kubernetesCluster: $(aksClusterName)
+              useClusterAdmin: true
+              command: 'get'
+              arguments: 'pod'
+              secretType: 'dockerRegistry'
+              containerRegistryType: 'Azure Container Registry'
+
+          - task: Bash@3
+            displayName: 'Deploy Helm 3'
+            enabled: true
+            inputs:
+              filePath: './deploy-ingress/deploy-helm3.sh'
+              failOnStderr: false
+
+          - task: AzureCLI@1
+            displayName: 'Deploy AKS Application Gateway Ingress Controller'
+            enabled: true
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONECTION_NAME)
+              scriptLocation: 'scriptPath'
+              scriptPath: ./deploy-ingress/deploy-ingress-controller.sh
+              arguments: -r $(resourceGroupName) -c $(aksClusterName)
+
+          - task: Bash@3
+            enabled: true
+            displayName: 'Deploy Sample Applications'
+            inputs:
+              filePath: './deploy-apps/deploy-apps.sh'
+
+          - task: Bash@3
+            enabled: false
+            displayName: 'Deploy Certificate Secret'
+            inputs:
+              filePath: './deploy-ingress/deploy-cert-secret.sh'
+
+          - task: Bash@3
+            enabled: true
+            displayName: 'Deploy Application Gateway Ingress'
+            inputs:
+              filePath: './deploy-ingress/deploy-ingress.sh'
+
+          - task: AzurePowerShell@5
+            enabled: true
+            displayName: 'Create/Update DNS records'
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONECTION_NAME) 
+              FailOnStandardError: true
+              azurePowerShellVersion: 'LatestVersion'
+              pwsh: true
+              ScriptType: 'FilePath'
+              ScriptPath: ./deploy-ingress/Set-ExternalDNS.ps1
+              ScriptArguments: 
+                -ResourceGroupName $(dnsResourceGroupName) 
+                -ZoneName $(zoneName) 
+                -PublicIpResourceId $(applicationGatewayPublicIpResourceId) 
+                -ARecordName 'agic-appgwy' 
+                -CNAMERecordName 'guestbook'

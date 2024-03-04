@@ -1,0 +1,292 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "name": {
+            "type": "string"
+        },
+        "suffix": {
+            "type": "string"
+        },
+        "appName": {
+            "type": "string"
+        },
+        "dnsZoneName": {
+            "type": "string"
+        },
+        "sku": {
+            "type": "object",
+            "defaultValue": {
+                "name": "Standard_v2",
+                "tier": "Standard_v2"
+            }
+        },
+        "subnetId": {
+            "type": "string"
+        },
+        "tags": {
+            "type": "object"
+        },
+        "backends": {
+            "type": "array",
+            "defaultValue": [
+            ]
+        },
+        "appGatewayAutoScaleMinCapacity": {
+            "type": "int",
+            "defaultValue": 0
+        },
+        "appGatewayAutoScaleMaxCapacity": {
+            "type": "int",
+            "defaultValue": 5
+        },
+        "userAssignedIdentityResourceId": {
+            "type": "string"
+        },
+        "pfxCertificateSecretId": {
+            "type": "string"
+        },
+        "requestTimeout": {
+            "type": "int",
+            "defaultValue": 20
+        }
+    },
+    "variables": {
+        "pipName": "[concat(parameters('name'), '-pip-', parameters('suffix'))]",
+        "appGwyName": "[concat(parameters('name'), '-', parameters('suffix'))]",
+        "appHostHeader": "[concat(parameters('appName'), '.', parameters('dnsZoneName'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2019-08-01",
+            "name": "[variables('pipName')]",
+            "location": "[resourceGroup().location]",
+            "tags": "[parameters('tags')]",
+            "sku": {
+                "name": "Standard",
+                "tier": "Regional"
+            },
+            "properties": {
+                "publicIPAddressVersion": "IPv4",
+                "publicIPAllocationMethod": "Static",
+                "idleTimeoutInMinutes": 4,
+                "dnsSettings": {
+                    "domainNameLabel": "[variables('appGwyName')]"
+                },
+                "ipTags": [
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/applicationGateways",
+            "apiVersion": "2019-08-01",
+            "name": "[variables('appGwyName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[variables('pipName')]"
+            ],
+            "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                    "[parameters('userAssignedIdentityResourceId')]": {
+                    }
+                }
+            },
+            "properties": {
+                "sku": "[parameters('sku')]",
+                "gatewayIPConfigurations": [
+                    {
+                        "name": "appGatewayIpConfig",
+                        "properties": {
+                            "subnet": {
+                                "id": "[parameters('subnetId')]"
+                            }
+                        }
+                    }
+                ],
+                "sslCertificates": [
+                    {
+                        "name": "front-end-tls-certificate",
+                        "properties": {
+                            "keyVaultSecretId": "[parameters('pfxCertificateSecretId')]"
+                        }
+                    }
+                ],
+                "trustedRootCertificates": [
+                ],
+                "frontendIPConfigurations": [
+                    {
+                        "name": "appGwPublicFrontendIp",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+                            }
+                        }
+                    }
+                ],
+                "frontendPorts": [
+                    {
+                        "name": "port_443",
+                        "properties": {
+                            "port": 443
+                        }
+                    },
+                    {
+                        "name": "port_80",
+                        "properties": {
+                            "port": 80
+                        }
+                    }
+                ],
+                "rewriteRuleSets": [
+                ],
+                "redirectConfigurations": [
+                ],
+                "enableHttp2": false,
+                "autoscaleConfiguration": {
+                    "minCapacity": "[parameters('appGatewayAutoScaleMinCapacity')]",
+                    "maxCapacity": "[parameters('appGatewayAutoScaleMaxCapacity')]"
+                },
+                "copy": [
+                    {
+                        "name": "backendAddressPools",
+                        "count": "[length(parameters('backends'))]",
+                        "input": {
+                            "name": "[concat('backendpool', '-', copyIndex('backendAddressPools', 1))]",
+                            "properties": {
+                                "backendAddresses": [
+                                    {
+                                        "fqdn": "[parameters('backends')[copyIndex('backendAddressPools')]]"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "name": "backendHttpSettingsCollection",
+                        "count": "[length(parameters('backends'))]",
+                        "input": {
+                            "name": "[concat(parameters('backends')[copyIndex('backendHttpSettingsCollection')], '-http-rule')]",
+                            "properties": {
+                                "port": "443",
+                                "protocol": "Https",
+                                "cookieBasedAffinity": "Disabled",
+                                "pickHostNameFromBackendAddress": true,
+                                "affinityCookieName": "ApplicationGatewayAffinity",
+                                "requestTimeout": "[parameters('requestTimeout')]",
+                                "probe": {
+                                    "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/probes/', concat(parameters('backends')[copyIndex('backendHttpSettingsCollection')], '-probe'))]"
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "name": "httpListeners",
+                        "count": "[length(parameters('backends'))]",
+                        "input": {
+                            "name": "[concat('multi-site-listener-', copyIndex('httpListeners', 1))]",
+                            "properties": {
+                                "frontendIPConfiguration": {
+                                    "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/frontendIPConfigurations/appGwPublicFrontendIp')]"
+                                },
+                                "frontendPort": {
+                                    "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/frontendPorts/port_443')]"
+                                },
+                                "protocol": "Https",
+                                "sslCertificate": {
+                                    "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/sslCertificates/', 'front-end-tls-certificate')]"
+                                },
+                                "hostName": "[variables('appHostHeader')]",
+                                "requireServerNameIndication": true
+                            }
+                        }
+                    },
+                    {
+                        "name": "requestRoutingRules",
+                        "count": "[length(parameters('backends'))]",
+                        "input": {
+                            "name": "[concat('routing-rule-', copyIndex('requestRoutingRules', 1))]",
+                            "properties": {
+                                "ruleType": "PathBasedRouting",
+                                "httpListener": {
+                                    "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/httpListeners/', concat('multi-site-listener-', copyIndex('requestRoutingRules', 1)))]"
+                                },
+                                "urlPathMap": {
+                                    "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/urlPathMaps/', concat('url-path-', copyIndex('requestRoutingRules', 1)))]"
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "name": "urlPathMaps",
+                        "count": "[length(parameters('backends'))]",
+                        "input": {
+                            "name": "[concat('url-path-', copyIndex('urlPathMaps', 1))]",
+                            "properties": {
+                                "defaultBackendAddressPool": {
+                                    "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/backendAddressPools/', concat('backendpool', '-', copyIndex('urlPathMaps', 1)))]"
+                                },
+                                "defaultBackendHttpSettings": {
+                                    "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/backendHttpSettingsCollection/', concat(parameters('backends')[copyIndex('urlPathMaps')], '-http-rule'))]"
+                                },
+                                "pathRules": [
+                                    {
+                                        "name": "[concat('path-rule-', copyIndex('urlPathMaps', 1))]",
+                                        "properties": {
+                                            "paths": [
+                                                "/*"
+                                            ],
+                                            "backendAddressPool": {
+                                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/backendAddressPools/', concat('backendpool', '-', copyIndex('urlPathMaps', 1)))]"
+                                            },
+                                            "backendHttpSettings": {
+                                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/backendHttpSettingsCollection/', concat(parameters('backends')[copyIndex('urlPathMaps')], '-http-rule'))]"
+                                            }
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    {
+                        "name": "probes",
+                        "count": "[length(parameters('backends'))]",
+                        "input": {
+                            "name": "[concat(parameters('backends')[copyIndex('probes')], '-probe')]",
+                            "properties": {
+                                "protocol": "Https",
+                                "path": "/",
+                                "interval": 30,
+                                "timeout": 30,
+                                "unhealthyThreshold": 3,
+                                "pickHostNameFromBackendHttpSettings": true,
+                                "minServers": 0,
+                                "match": {
+                                    "statusCodes": [
+                                        "200-399"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "outputs": {
+        "appGatewayName": {
+            "type": "string",
+            "value": "[variables('appGwyName')]"
+        },
+        "appGatewayPublicIpName": {
+            "type": "string",
+            "value": "[variables('pipName')]"
+        },
+        "appGatewayIpAddressDnsName": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Network/publicIpAddresses', variables('pipName'))).dnsSettings.fqdn]"
+        }
+    }
+}

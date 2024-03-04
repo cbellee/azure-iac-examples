@@ -1,0 +1,278 @@
+# Pipeline to deploy Network, AKS & SLB
+
+name: deployAzureResources
+
+trigger:
+- master
+
+variables:
+  # serviceConnection: # set in GUI variables
+  aksServicePrincipalAppId: 'de3ef06a-2824-4dce-b714-65ba1b5e0744'
+  aksServicePrincipalObjectId: 'd37981d6-bc89-4019-8c51-96a111f0bf62'
+  location: australiaeast
+  prefix: aks-slb-flexvol
+  containerName: 'templates'
+  timeStamp: $[format('{0:yyyy}-{0:MM}-{0:dd}-{0:HHmmss}', pipeline.startTime)]
+  aksVersion: 1.14.6
+  applicationGatewaySku: WAF_v2
+  flexvolNamespace: kv
+
+stages:
+- stage: 'dev'
+  displayName: 'dev environment release'
+  variables:
+    
+    environmentName: dev
+    projectName: "$(environmentName)-$(prefix)"
+    resourceGroupName: "$(projectName)-rg"
+    tags: '{"costCentre":"478132","project":"$(projectName)"}'
+  jobs:
+    - deployment: 
+      pool:
+        vmImage: 'ubuntu-latest'
+      environment: $(environmentName)
+      strategy:
+       runOnce:
+        deploy:
+          steps:
+          - checkout: self # needed to checkout repo!
+
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                $now = Get-Date
+                $sasTokenExpiry = $now.AddHours(2).ToString('u') -replace ' ','T'
+                Write-Host "##vso[task.setvariable variable=sasTokenExpiry;]$sasTokenExpiry"
+
+          - task: AzureResourceGroupDeployment@2
+            name: 'DeployStorage'
+            displayName: 'Deploy storage account for arm templates'
+            enabled: true
+            inputs:
+              action: Create Or Update Resource Group
+              azureSubscription: $(serviceConnection)
+              resourceGroupName: $(resourceGroupName)
+              csmFile: ./nestedtemplates/storage.json
+              location: $(location)
+              templateLocation: Linked artifact
+              deploymentMode: Incremental
+              deploymentOutputs: storageDeploymentOutput
+              deploymentName: "storageDeployment-$(timeStamp)"
+              overrideParameters: -sasTokenExpiry $(sasTokenExpiry) -storageSku Standard_LRS -storageKind StorageV2 -tags $(tags) -containerName $(containerName)
+
+          - task: PowerShell@2
+            displayName: 'Get Storage Deployment Outputs'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $outputs = '$(storageDeploymentOutput)' | ConvertFrom-Json
+                foreach ($output in $outputs.PSObject.Properties) {
+                  Write-Host "$($output.Name) - $($output.Value.value)"
+                  Write-Host "##vso[task.setvariable variable=$($output.Name);]$($output.Value.value)" 
+                }
+
+          - task: AzureCLI@1
+            displayName: 'Copy ARM template files to Azure blob storage'
+            enabled: true
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptLocation: 'inlineScript'
+              inlineScript: 'az storage blob upload-batch -d $(containerName) -s ./nestedtemplates/ --pattern *.json --account-name $(storageAccountName)'
+      
+          - task: AzureResourceGroupDeployment@2
+            name: 'deployResources'
+            displayName: 'Deploy resources'
+            enabled: true
+            inputs:
+              action: Create Or Update Resource Group
+              azureSubscription: $(serviceConnection)
+              resourceGroupName: $(resourceGroupName)
+              csmFile: ./templates/azuredeploy.json
+              csmParametersFile: ./templates/azuredeploy.parameters.json
+              location: $(location)
+              templateLocation: Linked artifact
+              deploymentMode: Incremental
+              deploymentName: "resourceDeployment-$(timeStamp)"
+              overrideParameters:
+                -storageUri $(storageContainerUri)
+                -sasToken $(storageAccountSasToken)
+                -aksVersion $(aksVersion)
+                -aksNodeCount 1
+                -aksNodeVMSize Standard_F2s_v2
+                -maxPods 50
+                -aksServicePrincipalObjectId $(aksServicePrincipalObjectId)
+                -aksServicePrincipalAppId $(aksServicePrincipalAppId)
+                -aksServicePrincipalSecret $(aksServicePrincipalSecret)
+
+          - task: ARM Outputs@5
+            name: 'GetResourceDeploymentOutput'
+            displayName: 'Get ARM Resource Deployment Output'
+            enabled: true
+            inputs:
+              ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+              ConnectedServiceNameARM: $(serviceConnection)
+              resourceGroupName: $(resourceGroupName)
+              whenLastDeploymentIsFailed: 'fail'
+              deploymentNameFilter: "resourceDeployment-$(timeStamp)"
+
+          - task: HelmInstaller@1
+            enabled: true
+            displayName: 'Install Helm'
+
+          - task: KubectlInstaller@0
+            enabled: true
+            inputs:
+              kubectlVersion: 'latest'
+
+          - task: Kubernetes@1
+            displayName: 'Deploy AAD Pod Identity'
+            enabled: false
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(serviceConnection)
+              azureResourceGroup: $(resourceGroupName)
+              kubernetesCluster: $(aksName)
+              useClusterAdmin: true
+              command: create
+              arguments: '-f https://raw.githubusercontent.com/Azure/aad-pod-identity/master/deploy/infra/deployment-rbac.yaml'
+
+          - task: AzureCLI@2
+            displayName: 'Assign Cluster SPN role'
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                  # get managed identity
+                  $managedIdentity = az identity show --ids $(aksManagedIdentityId) -o json | ConvertFrom-Json
+                  # Assign Reader Role to new Identity for your Key Vault
+                  az role assignment create --role Reader --assignee $managedIdentity.principalId --scope $(keyVaultId)
+                  # set policy to access keys in your Key Vault
+                  az keyvault set-policy --name $(keyVaultName) --key-permissions get --spn $managedIdentity.clientId
+                  # set policy to access secrets in your Key Vault
+                  az keyvault set-policy --name $(keyVaultName) --secret-permissions get --spn $managedIdentity.clientId
+                  # set policy to access certs in your Key Vault
+                  az keyvault set-policy --name $(keyVaultName) --certificate-permissions get --spn $managedIdentity.clientId
+                  # make AKS managed Identity clientId available to subsequent tasks
+                  Write-Host "##vso[task.setvariable variable=aksManagedIdentityClientId;]$managedIdentity.clientId"
+
+          - task: Kubernetes@1
+            name: 'install_azure_identity'
+            displayName: 'Install Azure Identity'
+            enabled: true
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(serviceConnection)
+              azureResourceGroup: $(resourceGroupName)
+              kubernetesCluster: $(aksName)
+              useClusterAdmin: true
+              command: apply
+              arguments: '-f ./manifests/flexvol/identity.yaml'
+
+          - task: Kubernetes@1
+            name: 'install_azure_identity_binding'
+            displayName: 'Install Azure Identity Binding'
+            enabled: true
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(serviceConnection)
+              azureResourceGroup: $(resourceGroupName)
+              kubernetesCluster: $(aksName)
+              useClusterAdmin: true
+              command: apply
+              arguments: '-f ./manifests/flexvol/identity-binding.yaml'
+
+          - task: Kubernetes@1
+            displayName: 'Azure Kevault FlexVol Deployment'
+            enabled: false
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(serviceConnection)
+              azureResourceGroup: $(resourceGroupName)
+              kubernetesCluster: $(aksName)
+              useClusterAdmin: true
+              namespace: $(flexvolNamespace)
+              forceUpdate: true
+              command: create
+              arguments: '-f https://raw.githubusercontent.com/Azure/kubernetes-keyvault-flexvol/master/deployment/kv-flexvol-installer.yaml'
+
+          - task: Kubernetes@1
+            name: 'install_traefik_configmap'
+            displayName: 'Install Traefik configmap'
+            enabled: true
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(serviceConnection)
+              azureResourceGroup: $(resourceGroupName)
+              kubernetesCluster: $(aksName)
+              useClusterAdmin: true
+              command: apply
+              arguments: '-f ./manifests/traefik/configmap.yaml'
+          
+          - task: Kubernetes@1
+            name: 'install_traefik_service'
+            displayName: 'Install Traefik service'
+            enabled: true
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(serviceConnection)
+              azureResourceGroup: $(resourceGroupName)
+              kubernetesCluster: $(aksName)
+              useClusterAdmin: true
+              command: apply
+              arguments: '-f ./manifests/traefik/service.yaml'
+
+          - task: Kubernetes@1
+            name: 'install_traefik_role_identity'
+            displayName: 'Install Traefik Identity'
+            enabled: true
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(serviceConnection)
+              azureResourceGroup: $(resourceGroupName)
+              kubernetesCluster: $(aksName)
+              useClusterAdmin: true
+              command: apply
+              arguments: '-f ./manifests/traefik/identity.yaml'
+
+          - task: Kubernetes@1
+            name: 'install_traefik_deployment'
+            displayName: 'Install Traefik Deployment'
+            enabled: true
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(serviceConnection)
+              azureResourceGroup: $(resourceGroupName)
+              kubernetesCluster: $(aksName)
+              useClusterAdmin: true
+              command: apply
+              arguments: '-f ./manifests/traefik/deployment.yaml'
+
+          - task: Kubernetes@1
+            name: 'install_echo_apple_deployment'
+            displayName: 'Install Echo-Apple Deployment'
+            enabled: true
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(serviceConnection)
+              azureResourceGroup: $(resourceGroupName)
+              kubernetesCluster: $(aksName)
+              useClusterAdmin: true
+              command: apply
+              arguments: '-f ./manifests/traefik/echo-apple.yaml'
+
+          - task: Kubernetes@1
+            name: 'install_echo_banana_deployment'
+            displayName: 'Install Echo-Banana Deployment'
+            enabled: true
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(serviceConnection)
+              azureResourceGroup: $(resourceGroupName)
+              kubernetesCluster: $(aksName)
+              useClusterAdmin: true
+              command: apply
+              arguments: '-f ./manifests/traefik/echo-banana.yaml'
+
+         

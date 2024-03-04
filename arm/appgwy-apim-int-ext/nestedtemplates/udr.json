@@ -1,0 +1,103 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "suffix": {
+            "type": "string"
+        },
+        "azureFirewallPrivateIpAddress": {
+            "type": "string"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "name": "[concat('onprem-to-hub-and-spoke', '-rt-', parameters('suffix'))]",
+            "apiVersion": "2018-11-01",
+            "type": "Microsoft.Network/routeTables",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "disableBgpRoutePropagation": false,
+                "routes": [
+                    {
+                        "name": "onprem-to-prod-aks-subnet-route",
+                        "type": "Microsoft.Network/routeTables/routes",
+                        "properties": {
+                            "addressPrefix": "10.2.1.0/24",
+                            "nextHopType": "VirtualAppliance",
+                            "nextHopIpAddress": "[parameters('azureFirewallPrivateIpAddress')]"
+                        }
+                    },
+                    {
+                        "name": "onprem-to-prod-data-subnet-route",
+                        "type": "Microsoft.Network/routeTables/routes",
+                        "properties": {
+                            "addressPrefix": "10.2.2.0/24",
+                            "nextHopType": "VirtualAppliance",
+                            "nextHopIpAddress": "[parameters('azureFirewallPrivateIpAddress')]"
+                        }
+                    },
+                    {
+                        "name": "onprem-to-uat-aks-subnet-route",
+                        "type": "Microsoft.Network/routeTables/routes",
+                        "properties": {
+                            "addressPrefix": "10.3.1.0/24",
+                            "nextHopType": "VirtualAppliance",
+                            "nextHopIpAddress": "[parameters('azureFirewallPrivateIpAddress')]"
+                        }
+                    },
+                    {
+                        "name": "onprem-to-uat-data-subnet-route",
+                        "type": "Microsoft.Network/routeTables/routes",
+                        "properties": {
+                            "addressPrefix": "10.3.2.0/24",
+                            "nextHopType": "VirtualAppliance",
+                            "nextHopIpAddress": "[parameters('azureFirewallPrivateIpAddress')]"
+                        }
+                    },
+                    {
+                        "name": "onprem-to-dev-aks-subnet-route",
+                        "type": "Microsoft.Network/routeTables/routes",
+                        "properties": {
+                            "addressPrefix": "10.4.1.0/24",
+                            "nextHopType": "VirtualAppliance",
+                            "nextHopIpAddress": "[parameters('azureFirewallPrivateIpAddress')]"
+                        }
+                    },
+                    {
+                        "name": "onprem-to-dev-data-subnet-route",
+                        "type": "Microsoft.Network/routeTables/routes",
+                        "properties": {
+                            "addressPrefix": "10.4.2.0/24",
+                            "nextHopType": "VirtualAppliance",
+                            "nextHopIpAddress": "[parameters('azureFirewallPrivateIpAddress')]"
+                        }
+                    }
+                ],
+                "subnets": []
+            }
+        },
+        {
+            "name": "[concat('default-firewall', '-rt-', parameters('suffix'))]",
+            "apiVersion": "2018-11-01",
+            "type": "Microsoft.Network/routeTables",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "disableBgpRoutePropagation": false,
+                "routes": [
+                    {
+                        "name": "default-fw-route",
+                        "type": "Microsoft.Network/routeTables/routes",
+                        "properties": {
+                            "addressPrefix": "0.0.0.0/0",
+                            "nextHopType": "VirtualAppliance",
+                            "nextHopIpAddress": "[parameters('azureFirewallPrivateIpAddress')]"
+                        }
+                    }
+                ],
+                "subnets": []
+            }
+        }
+    ],
+    "outputs": {}
+}

@@ -1,0 +1,107 @@
+# Pipeline to deploy App Gateway v2 multisite listener
+
+name: deployAzureResources
+trigger:
+- master
+variables:
+  # serviceConnection: set in GUI variables
+  location: australiaeast
+  containerName: 'templates'
+  timeStamp: $[format('{0:yyyy}-{0:MM}-{0:dd}-{0:HHmmss}', pipeline.startTime)]
+  vmSize: Standard_F2s_v2
+  # base64EncodedPfxCertificate: set in GUI variables
+  # sshPublicKey: set in GUI variables
+stages:
+- stage: 'dev'
+  displayName: 'dev environment release'
+  variables:
+    environmentName: dev
+    projectName: "$(environmentName)-app-gwy-msl"
+    resourceGroupName: "$(projectName)-rg"
+    tags: '{"costCentre":"478132","project":"$(projectName)"}'
+  jobs:
+    - deployment: 
+      pool:
+        vmImage: 'ubuntu-latest'
+      environment: $(environmentName)
+      strategy:
+       runOnce:
+        deploy:
+          steps:
+          - checkout: self # needed to checkout repo!
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                $now = Get-Date
+                $sasTokenExpiry = $now.AddHours(2).ToString('u') -replace ' ','T'
+                Write-Host "##vso[task.setvariable variable=sasTokenExpiry;]$sasTokenExpiry"
+
+          - task: AzureResourceGroupDeployment@2
+            name: 'DeployStorage'
+            displayName: 'Deploy storage account for arm templates'
+            enabled: true
+            inputs:
+              action: Create Or Update Resource Group
+              azureSubscription: $(serviceConnection)
+              resourceGroupName: $(resourceGroupName)
+              csmFile: ./nestedtemplates/storage.json
+              location: $(location)
+              templateLocation: Linked artifact
+              deploymentMode: Incremental
+              deploymentName: "storageDeployment-$(timeStamp)"
+              overrideParameters: -sasTokenExpiry $(sasTokenExpiry) -storageSku Standard_LRS -storageKind StorageV2 -tags $(tags) -containerName $(containerName)
+
+          - task: ARM Outputs@5
+            name: 'GetStorageDeploymentOutput'
+            displayName: 'Get ARM Storage Deployment Output'
+            enabled: true
+            inputs:
+              ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+              ConnectedServiceNameARM: $(serviceConnection)
+              resourceGroupName: $(resourceGroupName)
+              whenLastDeploymentIsFailed: 'fail'
+              deploymentNameFilter: "storageDeployment-$(timeStamp)"
+
+          - task: AzureCLI@1
+            displayName: 'Copy ARM template files to Azure blob storage'
+            enabled: true
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptLocation: 'inlineScript'
+              inlineScript: 'az storage blob upload-batch -d $(containerName) -s ./nestedtemplates/ --account-name $(storageAccountName)'
+      
+          - task: AzureResourceGroupDeployment@2
+            name: 'deployResources'
+            displayName: 'Deploy resources'
+            enabled: true
+            inputs:
+              action: Create Or Update Resource Group
+              azureSubscription: $(serviceConnection)
+              resourceGroupName: $(resourceGroupName)
+              csmFile: ./azuredeploy.json
+              csmParametersFile: ./azuredeploy.parameters.json
+              location: $(location)
+              templateLocation: Linked artifact
+              deploymentMode: Incremental
+              deploymentName: "resourceDeployment-$(timeStamp)"
+              overrideParameters: 
+                -prefix cbellee
+                -storageUri "$(storageContainerUri)"
+                -sasToken "$(storageAccountSasToken)"
+                -sshPublicKey "$(sshPublicKey)"
+                -appNames ["front-end","back-end"]
+                -vmSize $(vmSize)
+                -base64EncodedPfxCertificate $(base64EncodedPfxCertificate)
+                -pfxCertificatePassword $(pfxCertificatePassword)
+
+          - task: ARM Outputs@5
+            name: 'GetResourceDeploymentOutput'
+            displayName: 'Get ARM Resource Deployment Output'
+            enabled: true
+            inputs:
+              ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+              ConnectedServiceNameARM: $(serviceConnection)
+              resourceGroupName: $(resourceGroupName)
+              whenLastDeploymentIsFailed: 'fail'
+              deploymentNameFilter: "resourceDeployment-$(timeStamp)"

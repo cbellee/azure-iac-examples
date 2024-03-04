@@ -1,0 +1,218 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "appNames": {
+            "type": "array",
+            "defaultValue": [
+                "func-app-1",
+                "func-app-2"
+            ],
+            "metadata": {
+                "description": "The name of the function app that you wish to create."
+            }
+        },
+        "sku": {
+            "type": "string",
+            "allowedValues": [
+                "D1",
+                "F1",
+                "B1",
+                "B2",
+                "B3",
+                "S1",
+                "S2",
+                "S3",
+                "P1",
+                "P2",
+                "P3",
+                "P1V2",
+                "P2V2",
+                "P3V2",
+                "I1",
+                "I2",
+                "I3",
+                "Y1"
+            ],
+            "defaultValue": "P1V2",
+            "metadata": {
+                "description": "The pricing tier for the hosting plan."
+            }
+        },
+        "workerSize": {
+            "type": "string",
+            "allowedValues": [
+                "0",
+                "1",
+                "2"
+            ],
+            "defaultValue": "0",
+            "metadata": {
+                "description": "The instance size of the hosting plan (small, medium, or large)."
+            }
+        },
+        "storageAccountType": {
+            "type": "string",
+            "defaultValue": "Standard_LRS",
+            "allowedValues": [
+                "Standard_LRS",
+                "Standard_GRS",
+                "Standard_RAGRS"
+            ],
+            "metadata": {
+                "description": "Storage Account type"
+            }
+        },
+        "subnetId": {
+            "type": "string"
+        },
+        "apimSubnetId": {
+            "type": "string"
+        },
+        "suffix": {
+            "type": "string"
+        },
+        "functionBody": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "hostingPlanName": "[concat('asp-', parameters('suffix'))]",
+        "storageAccountName": "[concat('stor', 'func', parameters('suffix'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "name": "[variables('storageAccountName')]",
+            "apiVersion": "2018-11-01",
+            "location": "[resourceGroup().location]",
+            "kind": "Storage",
+            "sku": {
+                "name": "[parameters('storageAccountType')]"
+            }
+        },
+        {
+            "type": "Microsoft.Web/serverfarms",
+            "apiVersion": "2019-08-01",
+            "name": "[variables('hostingPlanName')]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "Name": "[parameters('sku')]"
+            },
+            "properties": {
+                "name": "[variables('hostingPlanName')]",
+
+                "workerSize": "[parameters('workerSize')]",
+                "numberOfWorkers": 1
+            }
+        },
+        {
+            "apiVersion": "2018-11-01",
+            "type": "Microsoft.Web/sites",
+            "copy": {
+                "name": "funcCopy",
+                "count": "[length(parameters('appNames'))]"
+            },
+            "name": "[concat(parameters('appNames')[copyIndex()], '-', parameters('suffix'))]",
+            "location": "[resourceGroup().location]",
+            "kind": "functionapp",
+            "properties": {
+                "name": "[concat(parameters('appNames')[copyIndex()], '-', parameters('suffix'))]",
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
+                "clientAffinityEnabled": false,
+                "siteConfig": {
+                    "alwaysOn": true,
+                    "ipSecurityRestrictions": [
+                        {
+                            "vnetSubnetResourceId": "[parameters('apimSubnetId')]",
+                            "action": "Allow",
+                            "tag": "Default",
+                            "priority": 1000,
+                            "name": "allow_inbound_from_apim_subnet",
+                            "description": "allow inbound traffic from APIMgmt subnet"
+                        }
+                    ]
+                }
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+            ],
+            "resources": [
+                {
+                    "apiVersion": "2018-11-01",
+                    "name": "appsettings",
+                    "type": "config",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Web/sites', concat(parameters('appNames')[copyIndex()], '-', parameters('suffix')))]",
+                        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+                    ],
+                    "properties": {
+                        "AzureWebJobsStorage": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listkeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2015-05-01-preview').key1,';')]",
+                        "AzureWebJobsDashboard": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listkeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2015-05-01-preview').key1,';')]",
+                        "FUNCTIONS_EXTENSION_VERSION": "~3",
+                        "FUNCTIONS_WORKER_RUNTIME": "powershell"
+                    }
+                },
+                {
+                    "apiVersion": "2018-02-01",
+                    "name": "virtualNetwork",
+                    "type": "networkConfig",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Web/sites', concat(parameters('appNames')[copyIndex()], '-', parameters('suffix')))]"
+                    ],
+                    "location": "[resourceGroup().location]",
+                    "properties": {
+                        "swiftSupported": true,
+                        "subnetResourceId": "[parameters('subnetId')]"
+                    }
+                },
+                {
+                    "apiVersion": "2018-11-01",
+                    "name": "HttpTrigger1",
+                    "type": "functions",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Web/sites', concat(parameters('appNames')[copyIndex()], '-', parameters('suffix')))]"
+                    ],
+                    "location": "[resourceGroup().location]",
+                    "properties": {
+                        "config": {
+                            "bindings": [
+                                {
+                                    "authLevel": "function",
+                                    "type": "httpTrigger",
+                                    "direction": "in",
+                                    "name": "Request",
+                                    "methods": [
+                                        "get",
+                                        "post"
+                                    ]
+                                },
+                                {
+                                    "type": "http",
+                                    "direction": "out",
+                                    "name": "Response"
+                                }
+                            ]
+                        },
+                        "files": {
+                            "run.ps1": "[base64ToString(parameters('functionBody'))]"
+                        },
+                        "language": "powershell",
+                        "isDisabled": false
+                    }
+                }
+            ]
+        }
+    ],
+    "outputs": {
+        "funcApp1Keys": {
+            "type": "string",
+            "value": "[listkeys(concat(resourceId('Microsoft.Web/sites', concat(parameters('appNames')[0], '-', parameters('suffix'))), '/host/default'), '2018-11-01').functionKeys.default]"
+        },
+        "funcApp2Keys": {
+            "type": "string",
+            "value": "[listkeys(concat(resourceId('Microsoft.Web/sites', concat(parameters('appNames')[1], '-', parameters('suffix'))), '/host/default'), '2018-11-01').functionKeys.default]"
+        }
+    }
+}

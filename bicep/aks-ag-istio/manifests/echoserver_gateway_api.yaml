@@ -1,0 +1,25 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: echoserver
+  namespace: default
+  labels:
+    istio.io/rev: asm-1-17
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-request-path: "/healthz/ready"
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-port: "15021"
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-path: "/healthz/ready"
+    service.beta.kubernetes.io/azure-load-balancer-health-probe-timeout: "10"
+
+    service.beta.kubernetes.io/port_80_health-probe_protocol: http
+    service.beta.kubernetes.io/port_80_health-probe_port: "15021"
+spec:
+  gatewayClassName: istio
+  listeners:
+  - name: http
+    port: 80
+    protocol: HTTP
+    allowedRoutes:
+      namespaces:
+        from: All

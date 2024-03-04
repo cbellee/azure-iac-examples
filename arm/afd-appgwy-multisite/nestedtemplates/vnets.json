@@ -1,0 +1,58 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "suffix": {
+            "type": "string"
+        },
+        "vNet": {
+            "type": "object"
+        },
+        "tags": {
+            "type": "object"
+        }
+    },
+    "variables": {
+        "copy": [
+            {
+                "name": "subnets",
+                "count": "[length(parameters('vNet').subnets)]",
+                "input": {
+                    "name": "[parameters('vNet').subnets[copyIndex('subnets')].name]",
+                    "properties": {
+                        "addressPrefix": "[parameters('vNet').subnets[copyIndex('subnets')].addressPrefix]",
+                        "routeTable": "[if(equals(parameters('vNet').subnets[copyIndex('subnets')].udrName, json('null')), json('null'), json(concat('{\"id\": \"', resourceId('Microsoft.Network/routeTables', concat(parameters('vNet').subnets[copyIndex('subnets')].udrName, '-rt-', parameters('suffix'))), '\"}', '\"}')))]",
+                        "networkSecurityGroup": "[if(equals(parameters('vNet').subnets[copyIndex('subnets')].nsgName, json('null')), json('null'), json(concat('{\"id\": \"', resourceId('Microsoft.Network/networkSecurityGroups', concat(parameters('vNet').subnets[copyIndex('subnets')].nsgName, '-nsg-', parameters('suffix'))), '\"}', '\"}')))]",
+                        "serviceEndpoints": "[if(equals(parameters('vNet').subnets[copyIndex('subnets')].serviceEndpoints, json('null')), json('null'), parameters('vNet').subnets[copyIndex('subnets')].serviceEndpoints)]"    
+                        },
+                    "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets/', concat(parameters('vNet').name, '-', parameters('suffix')), parameters('vNet').subnets[copyIndex('subnets')].name)]"
+                }
+            }
+        ]
+    },
+    "resources": [
+        {
+            "name": "[concat(parameters('vNet').name, '-', parameters('suffix'))]",
+            "type": "Microsoft.Network/virtualNetworks",
+            "location": "[resourceGroup().location]",
+            "apiVersion": "2018-11-01",
+            "tags": "[parameters('tags')]",
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": "[parameters('vNet').addressPrefixes]"
+                },
+                "subnets": "[variables('subnets')]"
+            }
+        }
+    ],
+    "outputs": {
+        "subnetRefs": {
+            "type": "array",
+            "value": "[variables('subnets')]"
+        },
+        "vnetRef": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.Network/virtualNetworks/', concat(parameters('vNet').name, '-', parameters('suffix')))]"
+        }
+    }
+}

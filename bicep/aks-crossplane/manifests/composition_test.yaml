@@ -1,0 +1,64 @@
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition  # We're specifying that we are defining a core Crossplane component
+metadata:
+  name: xnetworks.azuretest.azure.crossplane.io #
+spec:
+  compositeTypeRef:
+    apiVersion: azuretest.azure.crossplane.io/v1alpha1
+    kind: XNetwork # Referencing our XR kind
+  resources:  # The resources block is where we begin defining what to create
+    - base: # For each thing (MR) we create, we will include a 'base' block
+        apiVersion: azure.crossplane.io/v1alpha3 # Here we are saying we want to create something in Azure
+        kind: ResourceGroup  # Here we are saying we want to create a resource group
+        spec:
+          location: australiaeast          # Here we are saying will be placed in West US 2 region
+        patches:                       # Patches is how we take values from our XR and pass to Composition
+         - fromFieldPath: spec.id     # We're taking the spec.id value from the XR
+           toFieldPath: metadata.name # And injecting it into the MR metadata.name field
+           transforms:      # Transforms allow us to manipulate the value passed in before setting to MR
+           - type: string # In this case, we're adding '-rg' to the end of the XR spec.id value
+             string:
+              fmt: "%s-rg"
+         - fromFieldPath: spec.id
+           toFieldPath: metadata.labels[crossplane.io/app]  # Here we are setting a label so that we can refer to it with a selector from another Composition if needed
+    - base:
+        apiVersion: network.azure.crossplane.io/v1alpha3
+        kind: VirtualNetwork
+        spec:
+          resourceGroupNameSelector:  # This is the use of 'matchControllerRef' mentioned earlier
+            matchControllerRef: true  # We are pointing this VirtualNework' to the Resource Group created above
+        location: australiaeast # This is defined in the network.azure.crossplane.io/v1alpha3 API, it sets the Azure Region
+        properties:
+          addressSpace:
+            addressPrefixes: ['192.168.0.0/16'] # This is another part of the network.azure.crossplane.io/v1alpha3 API, setting the CIDR for the VirtualNetwork
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.labels[crossplane.io/app]
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+          - type: string
+            string:
+              fmt: "%s-vnet"
+    - base:
+        apiVersion: network.azure.crossplane.io/v1alpha3
+        kind: Subnet
+        spec:
+          resourceGroupNameSelector:
+            matchControllerRef: true
+          virtualNetworkNameSelector:
+            matchControllerRef: true
+          properties:
+           addressPrefix: '192.168.1.0/24'
+           serviceEndpoints:
+             - service: Microsoft.Sql
+      patches:
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.labels[crossplane.io/app]
+        - fromFieldPath: spec.id
+          toFieldPath: metadata.name
+          transforms:
+          - type: string
+            string:
+              fmt: "%s-sn"

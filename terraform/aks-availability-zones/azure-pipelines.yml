@@ -1,0 +1,86 @@
+# specific path build
+trigger:
+  branches:
+    include:
+    - master
+    - develop
+  paths:
+    include:
+    - terraform/aks-availability-zones/terraform/*
+    exclude:
+    - terraform/aks-availability-zones/azure-pipelines.yml
+
+variables:
+  # ADO_SERVICE_CONNECTION_NAME: # variable set in variable group 'aks_terraform_vars'
+  # SSH_KEY # variable set in variable group 'aks_terraform_vars'
+  # TF_STATE_STORAGE_ACCOUNT_NAME # variable set in variable group 'aks_terraform_vars'
+  - group: aks_terraform_vars
+  - name: TF_PATH
+    value: ./terraform/aks-availability-zones/terraform
+
+stages:
+- stage: dev
+  displayName: 'Deploy infrastructure to the dev environment'
+  jobs:
+  - deployment: deploy_aks_infra
+    displayName: deploy AKS infrastructure
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: aks-private-fw
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - task: AzureCLI@2
+            displayName: 'Setup authentication for Terraform'
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              addSpnToEnvironment: true # ensures 'servicePrincipalId' & 'servicePrincipalKey' values are available to Terraform
+              failOnStandardError: true
+              scriptLocation: inlineScript
+              scriptType: pscore
+              inlineScript: |   
+                # set Terraform authN variables
+                Write-Host "##vso[task.setvariable variable=ARM_SUBSCRIPTION_ID]$(az account show | ConvertFrom-Json | Select-Object -expandProperty id)"
+                Write-Host "##vso[task.setvariable variable=ARM_CLIENT_ID]$env:servicePrincipalId"
+                Write-Host "##vso[task.setvariable variable=ARM_CLIENT_SECRET]$env:servicePrincipalKey"
+                Write-Host "##vso[task.setvariable variable=ARM_TENANT_ID]$(az account show | ConvertFrom-Json | Select-Object -expandProperty tenantId)"
+                Write-Host "##vso[task.setvariable variable=ARM_ACCESS_KEY]$((az storage account keys list -n $(TF_STATE_STORAGE_ACCOUNT_NAME) | ConvertFrom-Json)[0].value)"
+          - task: AzureCLI@2
+            displayName: 'Deploy AKS Infrastructure'
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              workingDirectory: $(TF_PATH)
+              inlineScript: |               
+                # Initialize Terraform
+                Write-Host "############# Terraform init ############"
+                terraform init -input=false
+
+                # Create plan
+                Write-Host "############# Terraform plan ############"
+                terraform plan -var 'ssh_key=$(SSH_KEY)' -out tfplan 
+
+                # Show plan
+                Write-Host "############# Terraform show ############"
+                $plan = terraform show -json | ConvertFrom-Json
+                Write-Host $plan.values
+
+                # Apply plan
+                Write-Host "############# Terraform apply ############"
+                terraform apply -auto-approve tfplan 
+
+                # Output apply
+                # Set Terraform output as pipeline environment variables
+                Write-Host "############# Terraform output ############"
+                $tfOutput = terraform output -json | ConvertFrom-Json
+                Write-Host "##vso[task.setvariable variable=RESOURCE_GROUP_NAME]$($tfOutput.'resource-group-name'.value)"
+                Write-Host "##vso[task.setvariable variable=CLUSTER_NAME]$($tfOutput.'aks-cluster-name'.value)"
+                Write-Host "##vso[task.setvariable variable=CLUSTER_RESOURCE_GROUP_NAME]$($tfOutput.'aks-node-rg'.value)"
+                Write-Host "##vso[task.setvariable variable=CLUSTER_ID]$($tfOutput.'aks-cluster-id'.value)"
+                Write-Host "##vso[task.setvariable variable=KUBECONFIG]$($tfOutput.'kube-config'.value)"     
+                Write-Host "##vso[task.setvariable variable=HUB_VNET_ID]$($tfOutput.'hub-vnet-id'.value)"     
+                Write-Host "##vso[task.setvariable variable=SPOKE_VNET_ID]$($tfOutput.'spoke-vnet-id'.value)"           
+ 

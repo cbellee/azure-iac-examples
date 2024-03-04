@@ -1,0 +1,141 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "suffix": {
+            "type": "string"
+        },
+        "appGatewayPublicIpAddress": {
+            "type": "string"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2018-08-01",
+            "name": "[concat('appGateway-subnet', '-nsg-', parameters('suffix'))]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "appgwy-v1",
+                        "properties": {
+                            "description": "This rule is needed for application gateway probes to work",
+                            "protocol": "*",
+                            "destinationAddressPrefix": "*",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "65503-65534",
+                            "sourceAddressPrefix": "Internet",
+                            "access": "Allow",
+                            "priority": 1000,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "appgwy-v2",
+                        "properties": {
+                            "description": "This rule is needed for application gateway probes to work",
+                            "protocol": "*",
+                            "destinationAddressPrefix": "*",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "65200-65535",
+                            "sourceAddressPrefix": "Internet",
+                            "access": "Allow",
+                            "priority": 1010,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "appgwy-inbound-internet",
+                        "properties": {
+                            "description": "This rule is needed for application gateway probes to work",
+                            "protocol": "Tcp",
+                            "destinationAddressPrefix": "VirtualNetwork",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "",
+                            "destinationPortRanges": [
+                                "443"
+                            ],
+                            "sourceAddressPrefix": "Internet",
+                            "access": "Allow",
+                            "priority": 1020,
+                            "direction": "Inbound"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2018-08-01",
+            "name": "[concat('apim-subnet', '-nsg-', parameters('suffix'))]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "allow-inbound-apim-mgmt",
+                        "properties": {
+                            "description": "allow-inbound-apim-mgmt",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "3443",
+                            "sourceAddressPrefix": "ApiManagement",
+                            "destinationAddressPrefix": "VirtualNetwork",
+                            "access": "Allow",
+                            "priority": 1010,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "allow-inbound-app-gwy",
+                        "properties": {
+                            "description": "allow-inbound-app-gwy",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "3443",
+                            "sourceAddressPrefix": "[parameters('appGatewayPublicIpAddress')]",
+                            "destinationAddressPrefix": "VirtualNetwork",
+                            "access": "Allow",
+                            "priority": 1020,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "allow-outbound-apim-sql",
+                        "properties": {
+                            "description": "allow-outbound-apim-sql",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "1443",
+                            "sourceAddressPrefix": "VirtualNetwork",
+                            "destinationAddressPrefix": "Sql",
+                            "access": "Allow",
+                            "priority": 1000,
+                            "direction": "Outbound"
+                        }
+                    },
+                    {
+                        "name": "allow-outbound-apim-storage",
+                        "properties": {
+                            "description": "allow-outbound-apim-storage",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "",
+                            "destinationPortRanges": [
+                                "80",
+                                "443"
+                            ],
+                            "sourceAddressPrefix": "VirtualNetwork",
+                            "destinationAddressPrefix": "Storage",
+                            "access": "Allow",
+                            "priority": 1010,
+                            "direction": "Outbound"
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "outputs": {}
+}

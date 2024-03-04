@@ -1,0 +1,207 @@
+# Pipeline to deploy AFD & APIM in a multi-region configuration
+
+name: deployAzureResources
+
+trigger:
+- master
+
+variables:
+  # serviceConnection: # set in GUI variables
+  projectName: afd-apim-multisite
+  tags: '{"costCentre":"478132","project":"$(projectName)"}'
+  containerName: 'templates'
+  primaryRegion: australiaeast
+  primaryRegionShortName: syd
+  primaryRegionApimOutput: "PRI_"
+  primaryRegionApimOutputDnsName: "$(primaryRegionApimOutput)APIMDNSNAME"
+  secondaryRegion: australiasoutheast
+  secondaryRegionShortName: mel
+  secondaryRegionApimOutput: "SEC_"
+  secondaryRegionApimOutputDnsName: "$(secondaryRegionApimOutput)APIMDNSNAME"
+
+
+stages:
+- stage: 'primary_deployment'
+  variables: 
+    resourceGroupName: "$(projectName)-$(primaryRegionShortName)-rg"
+  displayName: 'primary environment deployment'
+  jobs:
+    - job: 'primary_deployment_job'
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: PowerShell@2
+          displayName: "Generate SAS Token Expiry time stamp"
+          inputs:
+            targetType: 'inline'
+            script: |
+              $now = Get-Date
+              $sasTokenExpiry = $now.AddHours(2).ToString('u') -replace ' ','T'
+              Write-Host "##vso[task.setvariable variable=sasTokenExpiry;]$sasTokenExpiry"
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployStorage'
+          displayName: 'Deploy storage account for ARM templates'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./nestedtemplates/storage.json
+            location: $(primaryRegion)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: storageDeployment
+            overrideParameters: -containerName $(containerName) -sasTokenExpiry $(sasTokenExpiry)
+
+        - task: ARM Outputs@5
+          name: 'GetStorageDeploymentOutput1'
+          displayName: 'Get ARM Storage Deployment Output'
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            whenLastDeploymentIsFailed: 'fail'
+            deploymentNameFilter: "storageDeployment"
+       
+        - task: AzureCLI@1
+          displayName: 'Copy ARM template files to Azure blob storage'
+          enabled: true
+          inputs:
+            azureSubscription: $(serviceConnection)
+            scriptLocation: 'inlineScript'
+            inlineScript: 'az storage blob upload-batch -d $(containerName) -s ./nestedtemplates/ --pattern *.json --account-name $(storageAccountName)'
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployResources'
+          displayName: 'Deploy resources'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./templates/azuredeploy.json
+            csmParametersFile: ./azuredeploy.$(primaryRegionShortName).parameters.json
+            location: $(primaryRegion)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "$(primaryRegionShortName)-resourceDeployment"
+            overrideParameters: -storageUri $(storageContainerUri) -sasToken $(storageAccountSasToken)
+
+- stage: 'secondary_deployment'
+  dependsOn: [] # causes stages to run in parallel
+  variables: 
+    resourceGroupName: "$(projectName)-$(secondaryRegionShortName)-rg"
+  displayName: 'secondary environment deployment'
+  jobs:
+    - job: 'secondary_deployment_job'
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: PowerShell@2
+          inputs:
+            targetType: 'inline'
+            script: |
+              $now = Get-Date
+              $sasTokenExpiry = $now.AddHours(2).ToString('u') -replace ' ','T'
+              Write-Host "##vso[task.setvariable variable=sasTokenExpiry;]$sasTokenExpiry"
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployStorage'
+          displayName: 'Deploy storage account for arm templates'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./nestedtemplates/storage.json
+            location: $(secondaryRegion)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "storageDeployment"
+            overrideParameters: -containerName $(containerName) -sasTokenExpiry $(sasTokenExpiry)
+
+        - task: ARM Outputs@5
+          name: 'GetStorageDeploymentOutput1'
+          displayName: 'Get ARM Storage Deployment Output'
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            whenLastDeploymentIsFailed: 'fail'
+            deploymentNameFilter: "storageDeployment"
+
+        - task: AzureCLI@1
+          displayName: 'Copy ARM template files to Azure blob storage'
+          enabled: true
+          inputs:
+            azureSubscription: $(serviceConnection)
+            scriptLocation: 'inlineScript'
+            inlineScript: 'az storage blob upload-batch -d $(containerName) -s ./nestedtemplates/ --pattern *.json --account-name $(storageAccountName)'
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployResources'
+          displayName: 'Deploy resources'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./azuredeploy.json
+            csmParametersFile: ./azuredeploy.$(secondaryRegionShortName).parameters.json
+            location: $(secondaryRegion)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "$(secondaryRegionShortName)-resourceDeployment"
+            overrideParameters: -storageUri $(storageContainerUri) -sasToken $(storageAccountSasToken)
+
+- stage: 'AzureFrontDoor_deployment'
+  dependsOn: # wait for primary & secondary deployments to complete
+  - 'primary_deployment'
+  - 'secondary_deployment'
+  variables: 
+      resourceGroupName: "$(projectName)-$(primaryRegionShortName)-rg"
+  displayName: 'Azure Front Door environment deployment'
+  jobs:
+    - job: 'afd_deployment_job'
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: ARM Outputs@5
+          name: 'GetSydResourceDeploymentOutput'
+          displayName: 'Get ARM Resource Deployment Output'
+          enabled: true
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(serviceConnection)
+            resourceGroupName: "$(projectName)-$(primaryRegionShortName)-rg"
+            whenLastDeploymentIsFailed: 'fail'
+            prefix: $(primaryRegionApimOutput)
+            deploymentNameFilter: "$(primaryRegionShortName)-resourceDeployment"
+
+        - task: ARM Outputs@5
+          name: 'GetMelResourceDeploymentOutput'
+          displayName: 'Get ARM Resource Deployment Output'
+          enabled: true
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(serviceConnection)
+            resourceGroupName: "$(projectName)-$(secondaryRegionShortName)-rg"
+            whenLastDeploymentIsFailed: 'fail'
+            prefix: $(secondaryRegionApimOutput)
+            deploymentNameFilter: "$(secondaryRegionShortName)-resourceDeployment"
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployResources'
+          displayName: 'Deploy AFD resource'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./nestedtemplates/afd.json
+            location: $(primaryRegion)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "afd-Deployment"
+            overrideParameters: -backendAddresses ["$(PRI_APIMDNSNAME)", "$(SEC_APIMDNSNAME)"]

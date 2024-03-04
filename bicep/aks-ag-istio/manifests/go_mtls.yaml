@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-mtls
+spec:
+  selector:
+    app: go-mtls
+  ports:
+  - name: https
+    port: 443
+    protocol: TCP
+    targetPort: 8443
+---
+kind: Pod
+apiVersion: v1
+metadata:
+  name: go-mtls
+  labels:
+    app: go-mtls
+    azure.workload.identity/use: 'true'
+spec:
+  serviceAccountName: <serviceAccountName>
+  containers:
+    - name: go-mtls
+      image: <imageNameAndTag>
+      volumeMounts:
+      - name: secrets-store
+        mountPath: "/mnt/certs"
+        readOnly: true
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 250m
+          memory: 256Mi
+      imagePullPolicy: Always
+      ports:
+        - containerPort: 8443
+          protocol: TCP
+  volumes:
+    - name: secrets-store
+      csi:
+        driver: secrets-store.csi.k8s.io
+        readOnly: true
+        volumeAttributes:
+          secretProviderClass: akv-workload-identity-go-mtls

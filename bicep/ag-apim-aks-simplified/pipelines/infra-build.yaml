@@ -1,0 +1,42 @@
+# build.yaml
+
+parameters:
+  - name: vmImage
+    default: 'ubuntu-latest'
+    type: string
+  - name: poolName
+    default: 'Azure Pipelines'
+    type: string
+
+stages:
+  - stage: Build
+    jobs:
+    - job: Build
+      pool: 
+        name: ${{parameters.poolName}}
+        vmImage: ${{parameters.vmImage}}
+      steps:
+        - checkout: self
+          clean: true
+          persistCredentials: true
+        - task: Sam-Cogan.ARMTTKExtension.RunARMTTKTests.RunARMTTKTests@1
+          displayName: 'Test Infrastructure Templates'
+          inputs:
+            templatelocation: '$(System.DefaultWorkingDirectory)/bicep/ag-apim-aks-simplified/infra'
+            resultLocation: '$(System.DefaultWorkingDirectory)/results'
+            mainTemplates: main.bicep
+            ignoreExitCode: true  
+        - task: PublishTestResults@2
+          displayName: 'Publish Infrastructure Templates Test Results'
+          inputs:
+            testResultsFormat: NUnit
+            testResultsFiles: '**/*.xml'
+            searchFolder: '$(System.DefaultWorkingDirectory)/results'
+          condition: succeededOrFailed()
+        - task: CopyFiles@2
+          displayName: 'Copy Templates to Artifact Staging Directory'
+          inputs:
+            SourceFolder: '$(System.DefaultWorkingDirectory)/bicep/ag-apim-aks-simplified/infra'
+            TargetFolder: '$(Build.ArtifactStagingDirectory)'
+        - task: PublishBuildArtifacts@1
+          displayName: 'Publish Artifact: drop'

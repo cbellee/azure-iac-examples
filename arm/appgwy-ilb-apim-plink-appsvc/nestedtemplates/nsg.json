@@ -1,0 +1,349 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"suffix": {
+			"type": "string"
+		},
+		"appGatewayPublicIpAddress": {
+			"type": "string"
+		}
+	},
+	"variables": {
+	},
+	"resources": [
+		{
+			"type": "Microsoft.Network/networkSecurityGroups",
+			"apiVersion": "2018-08-01",
+			"name": "[concat('app-gwy-subnet', '-nsg-', parameters('suffix'))]",
+			"location": "[resourceGroup().location]",
+			"properties": {
+				"securityRules": [
+					{
+						"name": "appgwy-v1",
+						"properties": {
+							"description": "This rule is needed for application gateway probes to work",
+							"protocol": "*",
+							"destinationAddressPrefix": "*",
+							"sourcePortRange": "*",
+							"destinationPortRange": "65503-65534",
+							"sourceAddressPrefix": "Internet",
+							"access": "Allow",
+							"priority": 1000,
+							"direction": "Inbound"
+						}
+					},
+					{
+						"name": "appgwy-v2",
+						"properties": {
+							"description": "This rule is needed for application gateway probes to work",
+							"protocol": "*",
+							"destinationAddressPrefix": "*",
+							"sourcePortRange": "*",
+							"destinationPortRange": "65200-65535",
+							"sourceAddressPrefix": "Internet",
+							"access": "Allow",
+							"priority": 1010,
+							"direction": "Inbound"
+						}
+					},
+					{
+						"name": "appgwy-inbound-internet",
+						"properties": {
+							"description": "This rule is needed for application gateway probes to work",
+							"protocol": "Tcp",
+							"destinationAddressPrefix": "VirtualNetwork",
+							"sourcePortRange": "*",
+							"destinationPortRange": "",
+							"destinationPortRanges": [
+								"443"
+							],
+							"sourceAddressPrefix": "Internet",
+							"access": "Allow",
+							"priority": 1020,
+							"direction": "Inbound"
+						}
+					}
+				]
+			}
+		},
+		{
+			"type": "Microsoft.Network/networkSecurityGroups",
+			"apiVersion": "2018-08-01",
+			"name": "[concat('apim-subnet', '-nsg-', parameters('suffix'))]",
+			"location": "[resourceGroup().location]",
+			"properties": {
+				"securityRules": [
+					{
+						"name": "allow-inbound-app-gwy",
+						"properties": {
+							"description": "allow-inbound-app-gwy",
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "3443",
+							"sourceAddressPrefix": "[parameters('appGatewayPublicIpAddress')]",
+							"destinationAddressPrefix": "VirtualNetwork",
+							"access": "Allow",
+							"priority": 1000,
+							"direction": "Inbound"
+						}
+					},
+					{
+						"name": "Client_communication_to_API_Management",
+						"properties": {
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "80",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "VirtualNetwork",
+							"access": "Allow",
+							"priority": 1010,
+							"direction": "Inbound"
+						}
+					},
+					{
+						"name": "Secure_Client_communication_to_API_Management",
+						"properties": {
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "443",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "VirtualNetwork",
+							"access": "Allow",
+							"priority": 1020,
+							"direction": "Inbound"
+						}
+					},
+					{
+						"name": "Management_endpoint_for_Azure_portal_and_Powershell",
+						"properties": {
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "3443",
+							"sourceAddressPrefix": "ApiManagement",
+							"destinationAddressPrefix": "VirtualNetwork",
+							"access": "Allow",
+							"priority": 1030,
+							"direction": "Inbound"
+						}
+					},
+					{
+						"name": "Dependency_on_Redis_Cache",
+						"properties": {
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "6381-6383",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "VirtualNetwork",
+							"access": "Allow",
+							"priority": 1040,
+							"direction": "Inbound"
+						}
+					},
+					{
+						"name": "Dependency_to_sync_Rate_Limit_Inbound",
+						"properties": {
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "4290",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "VirtualNetwork",
+							"access": "Allow",
+							"priority": 1050,
+							"direction": "Inbound"
+						}
+					},
+					{
+						"name": "Azure_Infrastructure_Load_Balancer",
+						"properties": {
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "*",
+							"sourceAddressPrefix": "AzureLoadBalancer",
+							"destinationAddressPrefix": "VirtualNetwork",
+							"access": "Allow",
+							"priority": 1060,
+							"direction": "Inbound"
+						}
+					},
+					{
+						"name": "Dependency_on_Azure_SQL",
+						"properties": {
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "1433",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "Sql",
+							"access": "Allow",
+							"priority": 1000,
+							"direction": "Outbound"
+						}
+					},
+					{
+						"name": "Dependency_for_Log_to_event_Hub_policy",
+						"properties": {
+							"protocol": "*",
+							"sourcePortRange": "*",
+							"destinationPortRange": "5671",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "EventHub",
+							"access": "Allow",
+							"priority": 1010,
+							"direction": "Outbound"
+						}
+					},
+					{
+						"name": "Dependency_on_Redis_Cache_outbound",
+						"properties": {
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "6381-6383",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "VirtualNetwork",
+							"access": "Allow",
+							"priority": 1020,
+							"direction": "Outbound"
+						}
+					},
+					{
+						"name": "Depenedency_To_sync_RateLimit_Outbound",
+						"properties": {
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "4290",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "VirtualNetwork",
+							"access": "Allow",
+							"priority": 1030,
+							"direction": "Outbound"
+						}
+					},
+					{
+						"name": "Dependency_on_Azure_File_Share_for_GIT",
+						"properties": {
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "445",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "Storage",
+							"access": "Allow",
+							"priority": 1040,
+							"direction": "Outbound"
+						}
+					},
+					{
+						"name": "Publish_DiagnosticLogs_And_Metrics",
+						"properties": {
+							"description": "APIM Logs and Metrics for consumption by admins and your IT team are all part of the management plane",
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "AzureMonitor",
+							"access": "Allow",
+							"priority": 1060,
+							"direction": "Outbound",
+							"destinationPortRanges": [
+								"443",
+								"12000",
+								"1886"
+							]
+						}
+					},
+					{
+						"name": "Connect_To_SMTP_Relay_For_SendingEmails",
+						"properties": {
+							"description": "APIM features the ability to generate email traffic as part of the data plane and the management plane",
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "Internet",
+							"access": "Allow",
+							"priority": 1070,
+							"direction": "Outbound",
+							"destinationPortRanges": [
+								"25",
+								"587",
+								"25028"
+							]
+						}
+					},
+					{
+						"name": "Authenticate_To_Azure_Active_Directory",
+						"properties": {
+							"description": "Connect to Azure Active Directory for Developer Portal Authentication or for Oauth2 flow during any Proxy Authentication",
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "AzureActiveDirectory",
+							"access": "Allow",
+							"priority": 1080,
+							"direction": "Outbound",
+							"destinationPortRanges": [
+								"80",
+								"443"
+							]
+						}
+					},
+					{
+						"name": "Dependency_on_Azure_Storage",
+						"properties": {
+							"description": "APIM service dependency on Azure Blob and Azure Table Storage",
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "443",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "Storage",
+							"access": "Allow",
+							"priority": 1090,
+							"direction": "Outbound"
+						}
+					},
+					{
+						"name": "Publish_Monitoring_Logs",
+						"properties": {
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"destinationPortRange": "443",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "AzureCloud",
+							"access": "Allow",
+							"priority": 1100,
+							"direction": "Outbound"
+						}
+					},
+					{
+						"name": "Access_KeyVault",
+						"properties": {
+							"description": "Allow APIM service control plane access to KeyVault to refresh secrets",
+							"protocol": "Tcp",
+							"sourcePortRange": "*",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "AzureKeyVault",
+							"access": "Allow",
+							"priority": 1110,
+							"direction": "Outbound",
+							"destinationPortRanges": [
+								"443"
+							]
+						}
+					},
+					{
+						"name": "Deny_All_Internet_Outbound",
+						"properties": {
+							"protocol": "*",
+							"sourcePortRange": "*",
+							"destinationPortRange": "*",
+							"sourceAddressPrefix": "VirtualNetwork",
+							"destinationAddressPrefix": "Internet",
+							"access": "Deny",
+							"priority": 1120,
+							"direction": "Outbound"
+						}
+					}
+				]
+			}
+		}
+	],
+	"outputs": {
+	}
+}

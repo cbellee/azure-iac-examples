@@ -1,0 +1,254 @@
+# Pipeline to deploy AFD & App in a multi-region configuration
+
+name: deployAzureResources
+
+trigger:
+- master
+
+variables:
+  # serviceConnection: # set in GUI variables
+  projectName: afd-appgwy-mls
+  appName: 'my-app-2'
+  dnsZoneName: 'kainiindustries.net'
+  tags: '{"costCentre":"478132","project":"$(projectName)"}'
+  containerName: 'templates'
+  primaryRegion: australiaeast
+  primaryRegionShortName: syd
+  primaryRegionAppGwyOutput: "PRI_"
+  secondaryRegion: australiasoutheast
+  secondaryRegionShortName: mel
+  secondaryRegionAppGwyOutput: "SEC_"
+  certificateName: 'ki-pfx-no-password'
+  azDoServicePrincipalObjectId: 1eb6f33c-ed0a-4d01-8025-593b5d117f12
+
+stages:
+- stage: 'resource_deployment'
+  variables: 
+    resourceGroupName: "$(projectName)-$(primaryRegionShortName)-rg"
+  displayName: 'multisite environment deployment'
+  jobs:
+    - job: 'shared_resource_deployment'
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: PowerShell@2
+          displayName: "Generate SAS Token Expiry time stamp"
+          inputs:
+            targetType: 'inline'
+            script: |
+              $now = Get-Date
+              $sasTokenExpiry = $now.AddHours(2).ToString('u') -replace ' ','T'
+              Write-Host "##vso[task.setvariable variable=sasTokenExpiry;]$sasTokenExpiry" 
+              Write-Host "##vso[task.setvariable variable=sasTokenExpiry;isOutput=true]$sasTokenExpiry"
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployStorage'
+          displayName: 'Deploy storage account for ARM templates'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./nestedtemplates/storage.json
+            location: $(primaryRegion)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: storageDeployment
+            deploymentOutputs: storageDeploymentOutput
+            overrideParameters: -containerName $(containerName) -sasTokenExpiry $(sasTokenExpiry)
+
+        - task: PowerShell@2
+          name: 'storage_deployment_output'
+          displayName: 'Get Storage Deployment Output'
+          inputs:
+            targetType: 'inline'
+            script: |
+              $outputs = '$(storageDeploymentOutput)' | ConvertFrom-Json
+              foreach ($output in $outputs.PSObject.Properties) {
+                Write-Host "$($output.Name) - $($output.Value.value)"
+                Write-Host "##vso[task.setvariable variable=$($output.Name);]$($output.Value.value)" 
+                Write-Host "##vso[task.setvariable variable=$($output.Name);isOutput=true]$($output.Value.value)" 
+              }
+       
+        - task: AzureCLI@1
+          displayName: 'Copy ARM template files to Azure blob storage'
+          enabled: true
+          inputs:
+            azureSubscription: $(serviceConnection)
+            scriptLocation: 'inlineScript'
+            inlineScript: 'az storage blob upload-batch -d $(containerName) -s ./nestedtemplates/ --pattern *.json --account-name $(storageAccountName)'
+    
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployKeyVault'
+          displayName: 'Deploy Key Vault'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./nestedtemplates/keyvault.json
+            location: $(primaryRegion)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: keyVaultDeployment
+            deploymentOutputs: keyVaultDeploymentOutput
+            overrideParameters: -azDoServicePrincipalObjectId $(azDoServicePrincipalObjectId)
+
+        - task: PowerShell@2
+          name: 'keyVault_deployment_output'
+          displayName: 'Get KeyVault Deployment Output'
+          inputs:
+            targetType: 'inline'
+            script: |
+              $outputs = '$(keyVaultDeploymentOutput)' | ConvertFrom-Json
+              foreach ($output in $outputs.PSObject.Properties) {
+                Write-Host "$($output.Name) - $($output.Value.value)"
+                Write-Host "##vso[task.setvariable variable=$($output.Name);]$($output.Value.value)" 
+                Write-Host "##vso[task.setvariable variable=$($output.Name);isOutput=true]$($output.Value.value)" 
+              }
+
+        - task: AzurePowerShell@4
+          inputs:
+            azurePowerShellVersion: LatestVersion
+            azureSubscription: $(serviceConnection)
+            ScriptType: InlineScript
+            Inline: |
+              Import-AzKeyVaultCertificate -VaultName $(keyVaultName) -Name $(certificateName) -FilePath ./certs/ki-wildcard-certificate-no-password.pfx
+
+    - job: 'primary_deployment_job'
+      dependsOn: [
+        'shared_resource_deployment'
+      ]
+      variables:
+        userAssignedIdentityResourceId: $[ dependencies.shared_resource_deployment.outputs['keyVault_deployment_output.userAssignedIdentityResourceId'] ]
+        storageContainerUri: $[ dependencies.shared_resource_deployment.outputs['storage_deployment_output.storageContainerUri'] ]
+        storageAccountSasToken: $[ dependencies.shared_resource_deployment.outputs['storage_deployment_output.storageAccountSasToken'] ]
+        keyVaultName: $[ dependencies.shared_resource_deployment.outputs['keyVault_deployment_output.keyVaultName'] ]
+        pfxCertificateSecretId: "https://$(keyVaultName).vault.azure.net/secrets/$(certificateName)"
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployResources'
+          displayName: 'Deploy resources'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./azuredeploy.json
+            csmParametersFile: ./azuredeploy.$(primaryRegionShortName).parameters.json
+            location: $(primaryRegion)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "$(primaryRegionShortName)-resourceDeployment"
+            overrideParameters: -userAssignedIdentityResourceId $(userAssignedIdentityResourceId) -appName $(appName) -dnsZoneName $(dnsZoneName) -storageUri $(storageContainerUri) -sasToken $(storageAccountSasToken) -appName "$(primaryRegionShortName)-app" -pfxCertificateSecretId $(pfxCertificateSecretId) # -pfxCertificate $(pfxCertificate) -pfxCertificatePassword $(pfxCertificatePassword)
+
+    - job: 'secondary_deployment_job'
+      dependsOn: [
+        'shared_resource_deployment'
+      ]
+      variables: 
+        resourceGroupName: "$(projectName)-$(secondaryRegionShortName)-rg"
+        userAssignedIdentityResourceId: $[ dependencies.shared_resource_deployment.outputs['keyVault_deployment_output.userAssignedIdentityResourceId'] ]
+        storageContainerUri: $[ dependencies.shared_resource_deployment.outputs['storage_deployment_output.storageContainerUri'] ]
+        storageAccountSasToken: $[ dependencies.shared_resource_deployment.outputs['storage_deployment_output.storageAccountSasToken'] ]
+        keyVaultName: $[ dependencies.shared_resource_deployment.outputs['keyVault_deployment_output.keyVaultName'] ]
+        pfxCertificateSecretId: "https://$(keyVaultName).vault.azure.net/secrets/$(certificateName)"
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployResources'
+          displayName: 'Deploy resources'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./azuredeploy.json
+            csmParametersFile: ./azuredeploy.$(secondaryRegionShortName).parameters.json
+            location: $(secondaryRegion)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "$(secondaryRegionShortName)-resourceDeployment"
+            overrideParameters: -userAssignedIdentityResourceId $(userAssignedIdentityResourceId) -appName $(appName) -dnsZoneName $(dnsZoneName) -storageUri $(storageContainerUri) -sasToken $(storageAccountSasToken) -appName "$(secondaryRegionShortName)-app" -pfxCertificateSecretId $(pfxCertificateSecretId) # -pfxCertificate $(pfxCertificate) -pfxCertificatePassword $(pfxCertificatePassword)
+
+- stage: 'AzureFrontDoor_deployment'
+  dependsOn: # wait for primary & secondary deployments to complete
+  - 'resource_deployment'
+  variables: 
+      resourceGroupName: "$(projectName)-$(primaryRegionShortName)-rg"
+  displayName: 'Azure Front Door environment deployment'
+  jobs:
+    - job: 'afd_deployment_job'
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: ARM Outputs@5
+          name: 'GetSydResourceDeploymentOutput'
+          displayName: 'Get ARM Resource Deployment Output'
+          enabled: true
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(serviceConnection)
+            resourceGroupName: "$(projectName)-$(primaryRegionShortName)-rg"
+            whenLastDeploymentIsFailed: 'fail'
+            prefix: $(primaryRegionAppGwyOutput)
+            deploymentNameFilter: "$(primaryRegionShortName)-resourceDeployment"
+
+        - task: ARM Outputs@5
+          name: 'GetMelResourceDeploymentOutput'
+          displayName: 'Get ARM Resource Deployment Output'
+          enabled: true
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(serviceConnection)
+            resourceGroupName: "$(projectName)-$(secondaryRegionShortName)-rg"
+            whenLastDeploymentIsFailed: 'fail'
+            prefix: $(secondaryRegionAppGwyOutput)
+            deploymentNameFilter: "$(secondaryRegionShortName)-resourceDeployment"
+
+        - task: PowerShell@2
+          enabled: false
+          name: dumpvars
+          inputs:
+            targetType: inline
+            script: |
+              dir env:
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployResources'
+          displayName: 'Deploy AFD resource'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./nestedtemplates/afd.json
+            location: $(primaryRegion)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "afd-Deployment"
+            overrideParameters: -appName $(appName) -dnsZoneName $(dnsZoneName) -backendAddresses ["$(PRI_APPGATEWAYIPADDRESSDNSNAME)", "$(SEC_APPGATEWAYIPADDRESSDNSNAME)"]
+        
+        - task: ARM Outputs@5
+          name: 'GetAFDResourceDeploymentOutput'
+          displayName: 'Get AFD ARM Resource Deployment Output'
+          enabled: true
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            whenLastDeploymentIsFailed: 'fail'
+            deploymentNameFilter: "afd-Deployment"
+
+        - task: AzurePowerShell@4
+          enabled: false
+          inputs:
+            azureSubscription: $(serviceConnection)
+            ScriptType: InlineScript
+            azurePowerShellVersion: LatestVersion
+            Inline: |
+              Enable-AzFrontDoorCustomDomainHttps -ResourceGroupName $(resourceGroupName) -FrontDoorName $(afdEndpointName) -FrontendEndpointName $(appHostHeader)

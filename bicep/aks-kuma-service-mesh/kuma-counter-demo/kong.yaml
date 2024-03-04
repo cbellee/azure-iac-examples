@@ -1,0 +1,52 @@
+# Install Kong
+
+$ kubectl apply -f https://bit.ly/k4k8s
+
+# Add Label to NS
+
+$ kubectl annotate ns kong kuma.io/sidecar-injection=enabled
+
+# Trigger sidecar
+
+$ kubectl delete pod --all -n kong
+
+# Add Ingress Rule
+
+echo "apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: demo-ingress
+  namespace: kuma-demo
+  annotations:
+    kubernetes.io/ingress.class: kong
+    konghq.com/strip-path: 'true'
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        backend:
+          serviceName: demo-app
+          servicePort: 5000" | kubectl apply -f -
+
+# Find Ingress Address
+
+minikube service -n kong kong-proxy --url | head -1
+
+# And consume!
+
+# You can also apply some plugins, like rate-limiting
+# (applied globally in this example)
+
+echo "apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: global-rate-limiting
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    global: \"true\"
+config: 
+  minute: 5
+  policy: local
+plugin: rate-limiting" | kubectl apply -f -

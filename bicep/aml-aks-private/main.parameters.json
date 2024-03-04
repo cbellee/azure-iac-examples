@@ -1,0 +1,134 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vNets": {
+            "value": [
+                {
+                    "name": "hub-vnet",
+                    "addressPrefixes": [
+                        "10.0.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "AzureFirewallSubnet",
+                            "addressPrefix": "10.0.0.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Enabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null
+                        },
+                        {
+                            "name": "ManagementSubnet",
+                            "addressPrefix": "10.0.1.0/24",
+                            "udrName": "default-firewall",
+                            "nsgName": "ds-vm",
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null
+                        },
+                        {
+                            "name": "AzureBastionSubnet",
+                            "addressPrefix": "10.0.2.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null
+                        },
+                        {
+                            "name": "GatewaySubnet",
+                            "addressPrefix": "10.0.3.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null
+                        }
+                    ]
+                },
+                {
+                    "name": "spoke-vnet",
+                    "addressPrefixes": [
+                        "10.1.0.0/16",
+                        "10.2.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "ScoringSubnet",
+                            "addressPrefix": "10.1.0.0/16",
+                            "udrName": "default-firewall",
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null
+                        },
+                        {
+                            "name": "TrainingSubnet",
+                            "addressPrefix": "10.2.0.0/24",
+                            "udrName": "default-firewall",
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null
+                        },
+                        {
+                            "name": "PrivateLinkSubnet",
+                            "addressPrefix": "10.2.1.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Disabled",
+                            "serviceEndpoints": [
+                                {
+                                    "locations": [
+                                        "australiaeast"
+                                    ],
+                                    "service": "Microsoft.Storage"
+                                },
+                                {
+                                    "locations": [
+                                        "australiaeast"
+                                    ],
+                                    "service": "Microsoft.KeyVault"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "LoadBalancerSubnet",
+                            "addressPrefix": "10.2.2.0/24",
+                            "udrName": "default-firewall",
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Disabled",
+                            "serviceEndpoints": null
+                        }
+                    ]
+                }
+            ]
+        },
+        "aksVersion": {
+            "value": null
+        },
+        "aksNodeVmSize": {
+            "value": "Standard_D4ds_v5"
+        },
+        "aksNodeCount": {
+            "value": 1
+        },
+        "tags": {
+            "value": {
+                "environment": "dev",
+                "costCenter": "123456789",
+                "dept": "it"
+            }
+        },
+        "aksMaxPodCount": {
+            "value": 20
+        },
+        "adminUserName": {
+            "value": "localadmin"
+        }
+    }
+}

@@ -1,0 +1,78 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentMode": {
+            "value": "Incremental"
+        },
+        "vNets": {
+            "value": [
+                {
+                    "name": "vnet",
+                    "addressPrefixes": [
+                        "10.0.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "AppGatewaySubnet",
+                            "addressPrefix": "10.0.1.0/24",
+                            "nsgName": null,
+                            "udrName": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "VMSubnet",
+                            "addressPrefix": "10.0.2.0/24",
+                            "nsgName": "ssh",
+                            "udrName": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "AppServiceSubnet",
+                            "addressPrefix": "10.0.3.0/24",
+                            "nsgName": null,
+                            "udrName": null,
+                            "delegations": null
+                        }
+                    ]
+                }
+            ]
+        },
+        "prefix": {
+            "value": "cbellee"
+        },
+        "storageUri": {
+            "value": null
+        },
+        "sasToken": {
+            "value": null
+        },
+        "tags": {
+            "value": {
+                "costCenter": "123456789",
+                "dept": "it"
+            }
+        },
+        "applicationGatewaySku": {
+            "value": {
+                "name": "Standard_v2",
+                "tier": "Standard_v2"
+            }
+        },
+        "sshPublicKey": {
+            "value": "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDCKEnblRrHUsUf2zEhDC4YrXVDTf6Vj3eZhfIT22og0zo2hdpfUizcDZ+i0J4Bieh9zkcsGMZtMkBseMVVa5tLSNi7sAg79a8Bap5RmxMDgx53ZCrJtTC3Li4e/3xwoCjnl5ulvHs6u863G84o8zgFqLgedKHBmJxsdPw5ykLSmQ4K6Qk7VVll6YdSab7R6NIwW5dX7aP2paD8KRUqcZ1xlArNhHiUT3bWaFNRRUOsFLCxk2xyoXeu+kC9HM2lAztIbUkBQ+xFYIPts8yPJggb4WF6Iz0uENJ25lUGen4svy39ZkqcK0ZfgsKZpaJf/+0wUbjqW2tlAMczbTRsKr8r cbellee@CB-SBOOK-1809"
+        },
+        "appNames": {
+            "value": [
+                "front-end",
+                "back-end"
+            ]
+        },
+        "vmSize": {
+            "value": "Standard_F2s_v2"
+        },
+        "pfxCertificatePassword": {
+            "value": null
+        }
+    }
+}

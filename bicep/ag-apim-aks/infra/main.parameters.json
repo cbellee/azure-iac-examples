@@ -1,0 +1,131 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "aksAdminGroupObjectId": {
+            "value": null
+        },
+        "tlsCertSecretId": {
+            "value": null
+        },
+        "publicDnsZoneName": {
+            "value": null
+        },
+        "privateDnsZoneName": {
+            "value": null
+        },
+        "publicDnsZoneResourceGroup": {
+            "value": null
+        },
+        "location": {
+            "value": null
+        },
+        "vNets": {
+            "value": [
+                {
+                    "name": "hub-vnet",
+                    "addressPrefixes": [
+                        "10.1.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "AppGatewaySubnet",
+                            "addressPrefix": "10.1.0.0/24",
+                            "nsgName": "appGateway-subnet",
+                            "udrName": null,
+                            "privateEndpointNetworkPolicies": "Enabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "ManagementSubnet",
+                            "addressPrefix": "10.1.1.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Enabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "AzureFirewallSubnet",
+                            "addressPrefix": "10.1.2.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Enabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "AzureBastionSubnet",
+                            "addressPrefix": "10.1.3.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Enabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "ApiMgmtSubnet",
+                            "addressPrefix": "10.1.4.0/24",
+                            "udrName": null,
+                            "nsgName": "apim-subnet",
+                            "privateEndpointNetworkPolicies": "Enabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        }
+                    ]
+                },
+                {
+                    "name": "spoke-vnet",
+                    "addressPrefixes": [
+                        "10.2.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "AksSystemSubnet",
+                            "addressPrefix": "10.2.0.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "AksUserSubnet",
+                            "addressPrefix": "10.2.1.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "AksLoadBalancerSubnet",
+                            "addressPrefix": "10.2.2.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        }
+                    ]
+                }
+            ]
+        },
+        "tags": {
+            "value": {
+                "environment": "dev",
+                "costCenter": "123456789",
+                "dept": "it"
+            }
+        }
+    }
+}

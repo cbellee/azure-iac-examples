@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: apis
+  name: spa-svc
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "aksLoadBalancerSubnet"
+spec:
+  type: LoadBalancer
+  loadBalancerIP: "{{SVC_IP_ADDRESS}}"
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+  selector:
+    app: spa
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: apis
+  name: spa
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: spa
+  template:
+    metadata:
+      labels:
+        app: spa
+    spec:
+      nodeSelector:
+        "kubernetes.io/os": linux
+      containers:
+      - name: spa
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "64Mi"
+          requests:
+            cpu: "250m"
+            memory: "32Mi"
+        image: "{{IMAGE_TAG}}"
+        ports:
+        - containerPort: 80
+          name: http
+      

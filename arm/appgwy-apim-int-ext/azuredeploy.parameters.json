@@ -1,0 +1,129 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vNets": {
+            "value": [
+                {
+                    "name": "hub-vnet",
+                    "addressPrefixes": [
+                        "10.1.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "AppGwySubnet",
+                            "addressPrefix": "10.1.2.0/24",
+                            "udrName": null,
+                            "nsgName": "appGateway-subnet"
+                        },
+                        {
+                            "name": "ApiMgmtSubnet",
+                            "addressPrefix": "10.1.3.0/24",
+                            "udrName": null,
+                            "nsgName": "apim-subnet"
+                        },
+                        {
+                            "name": "InfraSubnet",
+                            "addressPrefix": "10.1.4.0/24",
+                            "udrName": "default-firewall",
+                            "nsgName": null
+                        },
+                        {
+                            "name": "AzureFirewallSubnet",
+                            "addressPrefix": "10.1.5.0/24",
+                            "udrName": null,
+                            "nsgName": null
+                        }
+                    ]
+                },
+                {
+                    "name": "prod-vnet",
+                    "addressPrefixes": [
+                        "10.2.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "WorkloadSubnet",
+                            "addressPrefix": "10.2.1.0/24",
+                            "udrName": "spoke-to-hub",
+                            "nsgName": null
+                        },
+                        {
+                            "name": "DataSubnet",
+                            "addressPrefix": "10.2.2.0/24",
+                            "udrName": "spoke-to-hub",
+                            "nsgName": null
+                        }
+                    ]
+                },
+                {
+                    "name": "uat-vnet",
+                    "addressPrefixes": [
+                        "10.3.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "WorkloadSubnet",
+                            "addressPrefix": "10.3.1.0/24",
+                            "udrName": "default-firewall",
+                            "nsgName": null
+                        },
+                        {
+                            "name": "DataSubnet",
+                            "addressPrefix": "10.3.2.0/24",
+                            "udrName": "default-firewall",
+                            "nsgName": null
+                        }
+                    ]
+                },
+                {
+                    "name": "dev-vnet",
+                    "addressPrefixes": [
+                        "10.4.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "WorkloadSubnet",
+                            "addressPrefix": "10.4.1.0/24",
+                            "udrName": "default-firewall",
+                            "nsgName": null
+                        },
+                        {
+                            "name": "DataSubnet",
+                            "addressPrefix": "10.4.2.0/24",
+                            "udrName": "default-firewall",
+                            "nsgName": null
+                        }
+                    ]
+                }
+            ]
+        },
+        "deploymentMode": {
+            "value": "Incremental"
+        },
+        "storageUri": {
+            "value": null
+        },
+        "sasToken": {
+            "value": null
+        },
+        "aksVersion": {
+            "value": "1.14.6"
+        },
+        "tags": {
+            "value": {
+                "costCenter": "123456789",
+                "dept": "it"
+            }
+        },
+        "keyVaultId": {
+            "value": null
+        },
+        "keyVaultName": {
+            "value": null
+        },
+        "certificatePassword": {
+            "value": null
+        }
+    }
+}

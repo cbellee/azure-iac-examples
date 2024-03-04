@@ -1,0 +1,4 @@
+# exclude certs dir
+/certs
+**/.env
+**/env.json

@@ -1,0 +1,39 @@
+resources:
+  repositories:
+  - repository: aks-cicd-demo-repo
+    type: github
+    endpoint: cbellee
+    name: cbellee/aks-cicd-demo
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ./bicep/aks-cicd-demo/*
+pool:
+  vmImage: 'windows-latest'
+  poolName: 'Azure Pipelines'
+
+variables:
+  - name: location
+    value: 'australiaeast'
+  - name: azureConnection
+    value: 'internal_azure_subscription'
+  - name: vmImage
+    value: 'windows-latest'
+  - name: poolName
+    value: 'Azure Pipelines'
+
+stages:
+  - template: infra-build.yaml
+    parameters:
+      vmImage: $(vmImage)
+      poolName: $(poolName)
+  - template: infra-release.yaml
+    parameters:
+      vmImage: $(vmImage)
+      poolName: $(poolName)
+      location: $(location)
+      azureConnection: $(azureConnection)
+

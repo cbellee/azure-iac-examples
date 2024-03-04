@@ -1,0 +1,192 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "suffix": {
+            "type": "string"
+        },
+        "firewallSubnetRef": {
+            "type": "string"
+        },
+        "sourceAddressRangePrefix": {
+            "type": "array"
+        }
+    },
+    "variables": {
+        "publicIpName": "[concat('fwl-pip', '-', parameters('suffix'))]",
+        "firewallName": "[concat('fwl', '-', parameters('suffix'))]"
+    },
+    "resources": [
+        {
+            "name": "[variables('publicIPName')]",
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2017-11-01",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "properties": {
+                "publicIPAllocationMethod": "Static",
+                "publicIPAddressVersion": "IPv4"
+            }
+        },
+        {
+            "apiVersion": "2018-11-01",
+            "type": "Microsoft.Network/azureFirewalls",
+            "name": "[variables('firewallName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPName'))]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig",
+                        "properties": {
+                            "subnet": {
+                                "id": "[parameters('firewallSubnetRef')]"
+                            },
+                            "PublicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPName'))]"
+                            }
+                        }
+                    }
+                ],
+                "applicationRuleCollections": [
+                    {
+                        "name": "aks",
+                        "properties": {
+                            "priority": 100,
+                            "action": {
+                                "type": "Allow"
+                            },
+                            "rules": [
+                                {
+                                    "name": "allow-aks",
+                                    "sourceAddresses": "[parameters('sourceAddressRangePrefix')]",
+                                    "protocols": [
+                                        {
+                                            "protocolType": "HTTP",
+                                            "port": "80"
+                                        },
+                                        {
+                                            "protocolType": "HTTPS",
+                                            "port": "443"
+                                        }
+                                    ],
+                                    "targetFqdns": [
+                                        "*.azmk8s.io",
+                                        "*auth.docker.io",
+                                        "*cloudflare.docker.io",
+                                        "*cloudflare.docker.com",
+                                        "*registry-1.docker.io"
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "name": "oss",
+                        "properties": {
+                            "priority": 200,
+                            "action": {
+                                "type": "Allow"
+                            },
+                            "rules": [
+                                {
+                                    "name": "allow-oss",
+                                    "sourceAddresses": "[parameters('sourceAddressRangePrefix')]",
+                                    "protocols": [
+                                        {
+                                            "protocolType": "HTTP",
+                                            "port": "80"
+                                        },
+                                        {
+                                            "protocolType": "HTTPS",
+                                            "port": "443"
+                                        }
+                                    ],
+                                    "targetFqdns": [
+                                        "download.opensuse.org",
+                                        "login.microsoftonline.com",
+                                        "*.ubuntu.com",
+                                        "dc.services.visualstudio.com",
+                                        "*.opinsights.azure.com",
+                                        "github.com",
+                                        "*.github.com",
+                                        "raw.githubusercontent.com",
+                                        "*.ubuntu.com",
+                                        "api.snapcraft.io",
+                                        "download.opensuse.org"
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "name": "azure",
+                        "properties": {
+                            "priority": 300,
+                            "action": {
+                                "type": "Allow"
+                            },
+                            "rules": [
+                                {
+                                    "name": "allow-sites",
+                                    "sourceAddresses": "[parameters('sourceAddressRangePrefix')]",
+                                    "protocols": [
+                                        {
+                                            "protocolType": "HTTP",
+                                            "port": "80"
+                                        },
+                                        {
+                                            "protocolType": "HTTPS",
+                                            "port": "443"
+                                        }
+                                    ],
+                                    "targetFqdns": [
+                                        "*azurecr.io",
+                                        "*blob.core.windows.net",
+                                        "*.trafficmanager.net",
+                                        "*.azureedge.net",
+                                        "*.microsoft.com",
+                                        "*.core.windows.net",
+                                        "aka.ms",
+                                        "*.azure-automation.net",
+                                        "*.azure.com"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "networkRuleCollections": [
+                    {
+                        "name": "netRulesCollection",
+                        "properties": {
+                            "priority": 100,
+                            "action": {
+                                "type": "Allow"
+                            },
+                            "rules": [
+                                {
+                                    "name": "allow-ssh-https",
+                                    "sourceAddresses": "[parameters('sourceAddressRangePrefix')]",
+                                    "destinationAddresses": "[parameters('sourceAddressRangePrefix')]",
+                                    "destinationPorts": [
+                                        "22",
+                                        "443"
+                                    ],
+                                    "protocols": [
+                                        "Tcp"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "outputs": {}
+}

@@ -1,0 +1,94 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vNets": {
+            "value": [
+                {
+                    "name": "aks-vnet",
+                    "addressPrefixes": [
+                        "10.110.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "aksSubnet",
+                            "addressPrefix": "10.110.1.0/24"
+                        },
+                        {
+                            "name": "vmSubnet",
+                            "addressPrefix": "10.110.2.0/24"
+                        },
+                        {
+                            "name": "dbSubnet",
+                            "addressPrefix": "10.110.3.0/24"
+                        }
+                    ]
+                }
+            ]
+        },
+        "storageUri": {
+            "value": null
+        },
+        "sasToken": {
+            "value": null
+        },
+        "tags": {
+            "value": {
+                "costCenter": "123456789",
+                "dept": "it"
+            }
+        },
+        "aksVersion": {
+            "value": "1.14.6"
+        },
+        "aksNodeCount": {
+            "value": 3
+        },
+        "aksMinNodeCount": {
+            "value": 1
+        },
+        "aksMaxNodeCount": {
+            "value": 5
+        },
+        "aksNodeVMSize": {
+            "value": "Standard_F2s_v2"
+        },
+        "aksServicePrincipalAppId": {
+            "value": null
+        },
+        "aksServicePrincipalSecret": {
+            "value": null
+        },
+        "aksServicePrincipalObjectId": {
+            "value": null
+        },
+        "keyVaultAccessPolicy": {
+            "value": [
+                {
+                    "tenantId": "3d49be6f-6e38-404b-bbd4-f61c1a2d25bf",
+                    "objectId": "1eb6f33c-ed0a-4d01-8025-593b5d117f12",
+                    "permissions": {
+                        "keys": [
+                            "get",
+                            "list",
+                            "create",
+                            "update"
+                        ],
+                        "certificates": [
+                            "get",
+                            "list",
+                            "create",
+                            "import",
+                            "update"
+                        ],
+                        "secrets": [
+                            "get",
+                            "set",
+                            "list"
+                        ]
+                    }
+                }
+            ]
+        }
+    }
+}

@@ -1,0 +1,70 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"vNets": {
+			"value": [
+				{
+					"name": "spoke-vnet",
+					"addressPrefixes": [
+						"10.0.0.0/16"
+					],
+					"subnets": [
+						{
+							"name": "AKSSubnet",
+							"addressPrefix": "10.0.0.0/24",
+							"udrName": null,
+							"nsgName": null,
+							"privateEndpointNetworkPolicies": "Enabled",
+							"privateLinkServiceNetworkPolicies": "Enabled"
+						},
+						{
+							"name": "DBSubnet",
+							"addressPrefix": "10.0.1.0/24",
+							"udrName": null,
+							"nsgName": null,
+							"privateEndpointNetworkPolicies": "Disabled",
+							"privateLinkServiceNetworkPolicies": "Enabled"
+						}
+					]
+				}
+			]
+		},
+		"deploymentMode": {
+			"value": "Incremental"
+		},
+		"aksVersion": {
+			"value": "1.18.8"
+		},
+		"aksNodeVmSize": {
+			"value": "Standard_D2_v2"
+		},
+		"aksNodeCount": {
+			"value": 1
+		},
+		"tags": {
+			"value": {
+				"environment": "dev",
+				"costCenter": "123456789",
+				"dept": "it"
+			}
+		},
+		"dbAdminPassword": {
+			"value": null
+		},
+		"aadAdminGroupObjectIds": {
+			"value": [
+				null
+			]
+		},
+		"aksMaxPodCount": {
+			"value": null
+		},
+		"artifactsLocation": {
+			"value": null
+		},
+		"artifactsLocationSasToken": {
+			"value": null
+		}
+	}
+}

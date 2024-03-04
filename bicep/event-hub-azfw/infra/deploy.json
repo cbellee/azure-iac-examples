@@ -1,0 +1,688 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {},
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Network/firewallPolicies",
+            "apiVersion": "2020-11-01",
+            "name": "ev-hub-fw-policy",
+            "location": "australiaeast",
+            "properties": {
+                "sku": {
+                    "tier": "Premium"
+                },
+                "threatIntelMode": "Alert",
+                "intrusionDetection": {
+                    "mode": "Off"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateDnsZones",
+            "apiVersion": "2018-09-01",
+            "name": "privatelink.servicebus.windows.net",
+            "location": "global",
+            "properties": {
+                "maxNumberOfRecordSets": 25000,
+                "maxNumberOfVirtualNetworkLinks": 1000,
+                "maxNumberOfVirtualNetworkLinksWithRegistration": 100,
+                "numberOfRecordSets": 2,
+                "numberOfVirtualNetworkLinks": 1,
+                "numberOfVirtualNetworkLinksWithRegistration": 0,
+                "provisioningState": "Succeeded"
+            }
+        },
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2020-11-01",
+            "name": "ev-hub-fw-pip",
+            "location": "australiaeast",
+            "sku": {
+                "name": "Standard",
+                "tier": "Regional"
+            },
+            "properties": {
+                "ipAddress": "20.213.87.225",
+                "publicIPAddressVersion": "IPv4",
+                "publicIPAllocationMethod": "Static",
+                "idleTimeoutInMinutes": 4,
+                "ipTags": []
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2020-11-01",
+            "name": "ev-hub-fw-vnet",
+            "location": "australiaeast",
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "10.0.0.0/16"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "AzureFirewallSubnet",
+                        "properties": {
+                            "addressPrefix": "10.0.1.0/24",
+                            "delegations": [],
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled"
+                        }
+                    },
+                    {
+                        "name": "PrivateEndpointSubnet",
+                        "properties": {
+                            "addressPrefix": "10.0.2.0/24",
+                            "delegations": [],
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled"
+                        }
+                    }
+                ],
+                "virtualNetworkPeerings": [],
+                "enableDdosProtection": false
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2021-09-01",
+            "name": "storsvcbellee",
+            "location": "australiaeast",
+            "sku": {
+                "name": "Standard_RAGRS",
+                "tier": "Standard"
+            },
+            "kind": "StorageV2",
+            "properties": {
+                "dnsEndpointType": "Standard",
+                "defaultToOAuthAuthentication": false,
+                "publicNetworkAccess": "Enabled",
+                "allowCrossTenantReplication": true,
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": true,
+                "allowSharedKeyAccess": true,
+                "networkAcls": {
+                    "bypass": "AzureServices",
+                    "virtualNetworkRules": [],
+                    "ipRules": [],
+                    "defaultAction": "Allow"
+                },
+                "supportsHttpsTrafficOnly": true,
+                "encryption": {
+                    "requireInfrastructureEncryption": false,
+                    "services": {
+                        "file": {
+                            "keyType": "Account",
+                            "enabled": true
+                        },
+                        "blob": {
+                            "keyType": "Account",
+                            "enabled": true
+                        }
+                    },
+                    "keySource": "Microsoft.Storage"
+                },
+                "accessTier": "Hot"
+            }
+        },
+        {
+            "type": "Microsoft.EventHub/namespaces",
+            "apiVersion": "2022-01-01-preview",
+            "name": "cbellee-namespace-1",
+            "location": "Australia East",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/privateEndpoints', 'ev-hub-fw-pe')]"
+            ],
+            "sku": {
+                "name": "Standard",
+                "tier": "Standard",
+                "capacity": 1
+            },
+            "properties": {
+                "minimumTlsVersion": "1.2",
+                "publicNetworkAccess": "Disabled",
+                "disableLocalAuth": false,
+                "zoneRedundant": true,
+                "privateEndpointConnections": [
+                    {
+                        "properties": {
+                            "provisioningState": "Succeeded",
+                            "privateEndpoint": {
+                                "id": "[resourceId('Microsoft.Network/privateEndpoints', 'ev-hub-fw-pe')]"
+                            },
+                            "privateLinkServiceConnectionState": {
+                                "status": "Approved",
+                                "description": "Auto-Approved"
+                            }
+                        }
+                    }
+                ],
+                "isAutoInflateEnabled": false,
+                "maximumThroughputUnits": 0,
+                "kafkaEnabled": true
+            }
+        },
+        {
+            "type": "Microsoft.EventHub/namespaces/AuthorizationRules",
+            "apiVersion": "2022-01-01-preview",
+            "name": "cbellee-namespace-1/RootManageSharedAccessKey",
+            "location": "Australia East",
+            "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces', 'cbellee-namespace-1')]"
+            ],
+            "properties": {
+                "rights": [
+                    "Listen",
+                    "Manage",
+                    "Send"
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.EventHub/namespaces/networkRuleSets",
+            "apiVersion": "2022-01-01-preview",
+            "name": "cbellee-namespace-1/default",
+            "location": "Australia East",
+            "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces', 'cbellee-namespace-1')]"
+            ],
+            "properties": {
+                "publicNetworkAccess": "Disabled",
+                "defaultAction": "Allow",
+                "virtualNetworkRules": [],
+                "ipRules": []
+            }
+        },
+        {
+            "type": "Microsoft.Network/firewallPolicies/ruleCollectionGroups",
+            "apiVersion": "2020-11-01",
+            "name": "ev-hub-fw-policy/DefaultDnatRuleCollectionGroup",
+            "location": "australiaeast",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/firewallPolicies', 'ev-hub-fw-policy')]"
+            ],
+            "properties": {
+                "priority": 100,
+                "ruleCollections": [
+                    {
+                        "ruleCollectionType": "FirewallPolicyNatRuleCollection",
+                        "action": {
+                            "type": "Dnat"
+                        },
+                        "rules": [
+                            {
+                                "ruleType": "NatRule",
+                                "name": "event-hub-dnat-rule-1",
+                                "translatedAddress": "10.0.2.4",
+                                "translatedPort": "5671",
+                                "ipProtocols": [
+                                    "TCP"
+                                ],
+                                "sourceAddresses": [
+                                    "*"
+                                ],
+                                "sourceIpGroups": [],
+                                "destinationAddresses": [
+                                    "20.213.87.225"
+                                ],
+                                "destinationPorts": [
+                                    "5671"
+                                ]
+                            },
+                            {
+                                "ruleType": "NatRule",
+                                "name": "event-hub-dnat-rule-2",
+                                "translatedAddress": "10.0.2.4",
+                                "translatedPort": "5672",
+                                "ipProtocols": [
+                                    "TCP"
+                                ],
+                                "sourceAddresses": [
+                                    "*"
+                                ],
+                                "sourceIpGroups": [],
+                                "destinationAddresses": [
+                                    "20.213.87.225"
+                                ],
+                                "destinationPorts": [
+                                    "5672"
+                                ]
+                            },
+                            {
+                                "ruleType": "NatRule",
+                                "name": "event-hub-dnat-rule-3",
+                                "translatedAddress": "10.0.2.4",
+                                "translatedPort": "443",
+                                "ipProtocols": [
+                                    "TCP"
+                                ],
+                                "sourceAddresses": [
+                                    "*"
+                                ],
+                                "sourceIpGroups": [],
+                                "destinationAddresses": [
+                                    "20.213.87.225"
+                                ],
+                                "destinationPorts": [
+                                    "443"
+                                ]
+                            }
+                        ],
+                        "name": "event-hub-dnat",
+                        "priority": 1000
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/firewallPolicies/ruleCollectionGroups",
+            "apiVersion": "2020-11-01",
+            "name": "ev-hub-fw-policy/DefaultNetworkRuleCollectionGroup",
+            "location": "australiaeast",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/firewallPolicies', 'ev-hub-fw-policy')]"
+            ],
+            "properties": {
+                "priority": 200,
+                "ruleCollections": [
+                    {
+                        "ruleCollectionType": "FirewallPolicyFilterRuleCollection",
+                        "action": {
+                            "type": "Allow"
+                        },
+                        "rules": [
+                            {
+                                "ruleType": "NetworkRule",
+                                "name": "allow_all_private",
+                                "ipProtocols": [
+                                    "Any"
+                                ],
+                                "sourceAddresses": [
+                                    "10.0.0.0/8"
+                                ],
+                                "sourceIpGroups": [],
+                                "destinationAddresses": [
+                                    "10.0.0.0/8"
+                                ],
+                                "destinationIpGroups": [],
+                                "destinationFqdns": [],
+                                "destinationPorts": [
+                                    "*"
+                                ]
+                            }
+                        ],
+                        "name": "allow_all_peivate",
+                        "priority": 1000
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2020-11-01",
+            "name": "ev-hub-fw-pe.nic.0ec275b5-f898-439c-b196-73c045d11f03",
+            "location": "australiaeast",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'ev-hub-fw-vnet', 'PrivateEndpointSubnet')]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "privateEndpointIpConfig.276b0bcb-d14a-4553-81b2-d35d8cba8583",
+                        "properties": {
+                            "privateIPAddress": "10.0.2.4",
+                            "privateIPAllocationMethod": "Dynamic",
+                            "subnet": {
+                                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'ev-hub-fw-vnet', 'PrivateEndpointSubnet')]"
+                            },
+                            "primary": true,
+                            "privateIPAddressVersion": "IPv4"
+                        }
+                    }
+                ],
+                "dnsSettings": {
+                    "dnsServers": []
+                },
+                "enableAcceleratedNetworking": false,
+                "enableIPForwarding": false
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateDnsZones/A",
+            "apiVersion": "2018-09-01",
+            "name": "privatelink.servicebus.windows.net/cbellee-namespace-1",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.servicebus.windows.net')]"
+            ],
+            "properties": {
+                "ttl": 3600,
+                "aRecords": [
+                    {
+                        "ipv4Address": "10.0.2.4"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateDnsZones/SOA",
+            "apiVersion": "2018-09-01",
+            "name": "privatelink.servicebus.windows.net/@",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.servicebus.windows.net')]"
+            ],
+            "properties": {
+                "ttl": 3600,
+                "soaRecord": {
+                    "email": "azureprivatedns-host.microsoft.com",
+                    "expireTime": 2419200,
+                    "host": "azureprivatedns.net",
+                    "minimumTtl": 10,
+                    "refreshTime": 3600,
+                    "retryTime": 300,
+                    "serialNumber": 1
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks/subnets",
+            "apiVersion": "2020-11-01",
+            "name": "ev-hub-fw-vnet/AzureFirewallSubnet",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks', 'ev-hub-fw-vnet')]"
+            ],
+            "properties": {
+                "addressPrefix": "10.0.1.0/24",
+                "delegations": [],
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks/subnets",
+            "apiVersion": "2020-11-01",
+            "name": "ev-hub-fw-vnet/PrivateEndpointSubnet",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/virtualNetworks', 'ev-hub-fw-vnet')]"
+            ],
+            "properties": {
+                "addressPrefix": "10.0.2.0/24",
+                "delegations": [],
+                "privateEndpointNetworkPolicies": "Disabled",
+                "privateLinkServiceNetworkPolicies": "Enabled"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices",
+            "apiVersion": "2021-09-01",
+            "name": "storsvcbellee/default",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', 'storsvcbellee')]"
+            ],
+            "sku": {
+                "name": "Standard_RAGRS",
+                "tier": "Standard"
+            },
+            "properties": {
+                "changeFeed": {
+                    "enabled": false
+                },
+                "restorePolicy": {
+                    "enabled": false
+                },
+                "containerDeleteRetentionPolicy": {
+                    "enabled": true,
+                    "days": 7
+                },
+                "cors": {
+                    "corsRules": []
+                },
+                "deleteRetentionPolicy": {
+                    "allowPermanentDelete": false,
+                    "enabled": true,
+                    "days": 7
+                },
+                "isVersioningEnabled": false
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/fileServices",
+            "apiVersion": "2021-09-01",
+            "name": "storsvcbellee/default",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', 'storsvcbellee')]"
+            ],
+            "sku": {
+                "name": "Standard_RAGRS",
+                "tier": "Standard"
+            },
+            "properties": {
+                "protocolSettings": {
+                    "smb": {}
+                },
+                "cors": {
+                    "corsRules": []
+                },
+                "shareDeleteRetentionPolicy": {
+                    "enabled": true,
+                    "days": 7
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/queueServices",
+            "apiVersion": "2021-09-01",
+            "name": "storsvcbellee/default",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', 'storsvcbellee')]"
+            ],
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/tableServices",
+            "apiVersion": "2021-09-01",
+            "name": "storsvcbellee/default",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', 'storsvcbellee')]"
+            ],
+            "properties": {
+                "cors": {
+                    "corsRules": []
+                }
+            }
+        },
+        {
+            "type": "Microsoft.EventHub/namespaces/eventhubs",
+            "apiVersion": "2022-01-01-preview",
+            "name": "cbellee-namespace-1/ehcbellee1",
+            "location": "australiaeast",
+            "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces', 'cbellee-namespace-1')]",
+                "[resourceId('Microsoft.Storage/storageAccounts', 'storsvcbellee')]"
+            ],
+            "properties": {
+                "messageRetentionInDays": 1,
+                "partitionCount": 1,
+                "status": "Active",
+                "captureDescription": {
+                    "enabled": true,
+                    "encoding": "Avro",
+                    "destination": {
+                        "name": "EventHubArchive.AzureBlockBlob",
+                        "properties": {
+                            "storageAccountResourceId": "[resourceId('Microsoft.Storage/storageAccounts', 'storsvcbellee')]",
+                            "blobContainer": "evhubcontainer1",
+                            "archiveNameFormat": "{Namespace}/{EventHub}/{PartitionId}/{Year}/{Month}/{Day}/{Hour}/{Minute}/{Second}"
+                        }
+                    },
+                    "intervalInSeconds": 300,
+                    "sizeLimitInBytes": 314572800
+                }
+            }
+        },
+        {
+            "type": "Microsoft.EventHub/namespaces/eventhubs/authorizationrules",
+            "apiVersion": "2022-01-01-preview",
+            "name": "cbellee-namespace-1/ehcbellee1/send_listen_policy",
+            "location": "australiaeast",
+            "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces/eventhubs', 'cbellee-namespace-1', 'ehcbellee1')]",
+                "[resourceId('Microsoft.EventHub/namespaces', 'cbellee-namespace-1')]"
+            ],
+            "properties": {
+                "rights": [
+                    "Listen",
+                    "Send"
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.EventHub/namespaces/eventhubs/consumergroups",
+            "apiVersion": "2022-01-01-preview",
+            "name": "cbellee-namespace-1/ehcbellee1/$Default",
+            "location": "australiaeast",
+            "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces/eventhubs', 'cbellee-namespace-1', 'ehcbellee1')]",
+                "[resourceId('Microsoft.EventHub/namespaces', 'cbellee-namespace-1')]"
+            ],
+            "properties": {}
+        },
+        {
+            "type": "Microsoft.EventHub/namespaces/privateEndpointConnections",
+            "apiVersion": "2022-01-01-preview",
+            "name": "cbellee-namespace-1/0d4dd2d6-aa85-46a0-a5a3-0ab58d8cc2cd",
+            "location": "Australia East",
+            "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces', 'cbellee-namespace-1')]",
+                "[resourceId('Microsoft.Network/privateEndpoints', 'ev-hub-fw-pe')]"
+            ],
+            "properties": {
+                "provisioningState": "Succeeded",
+                "privateEndpoint": {
+                    "id": "[resourceId('Microsoft.Network/privateEndpoints', 'ev-hub-fw-pe')]"
+                },
+                "privateLinkServiceConnectionState": {
+                    "status": "Approved",
+                    "description": "Auto-Approved"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+            "apiVersion": "2018-09-01",
+            "name": "privatelink.servicebus.windows.net/qzcithsmtylck",
+            "location": "global",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', 'privatelink.servicebus.windows.net')]",
+                "[resourceId('Microsoft.Network/virtualNetworks', 'ev-hub-fw-vnet')]"
+            ],
+            "properties": {
+                "registrationEnabled": false,
+                "virtualNetwork": {
+                    "id": "[resourceId('Microsoft.Network/virtualNetworks', 'ev-hub-fw-vnet')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Network/privateEndpoints",
+            "apiVersion": "2020-11-01",
+            "name": "ev-hub-fw-pe",
+            "location": "australiaeast",
+            "dependsOn": [
+                "[resourceId('Microsoft.EventHub/namespaces', 'cbellee-namespace-1')]",
+                "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'ev-hub-fw-vnet', 'PrivateEndpointSubnet')]"
+            ],
+            "properties": {
+                "privateLinkServiceConnections": [
+                    {
+                        "name": "ev-hub-fw-pe_35efd664-8864-4e9a-be63-51160c8b904e",
+                        "properties": {
+                            "privateLinkServiceId": "[resourceId('Microsoft.EventHub/namespaces', 'cbellee-namespace-1')]",
+                            "groupIds": [
+                                "namespace"
+                            ],
+                            "privateLinkServiceConnectionState": {
+                                "status": "Approved",
+                                "description": "Auto-Approved",
+                                "actionsRequired": "None"
+                            }
+                        }
+                    }
+                ],
+                "manualPrivateLinkServiceConnections": [],
+                "subnet": {
+                    "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'ev-hub-fw-vnet', 'PrivateEndpointSubnet')]"
+                },
+                "customDnsConfigs": [
+                    {
+                        "fqdn": "cbellee-namespace-1.servicebus.windows.net",
+                        "ipAddresses": [
+                            "10.0.2.4"
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+            "apiVersion": "2021-09-01",
+            "name": "storsvcbellee/default/evhubcontainer1",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', 'storsvcbellee', 'default')]",
+                "[resourceId('Microsoft.Storage/storageAccounts', 'storsvcbellee')]"
+            ],
+            "properties": {
+                "immutableStorageWithVersioning": {
+                    "enabled": false
+                },
+                "defaultEncryptionScope": "$account-encryption-key",
+                "denyEncryptionScopeOverride": false,
+                "publicAccess": "None"
+            }
+        },
+        {
+            "type": "Microsoft.Network/azureFirewalls",
+            "apiVersion": "2020-11-01",
+            "name": "ev-hub-fw-azfw",
+            "location": "australiaeast",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', 'ev-hub-fw-pip')]",
+                "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'ev-hub-fw-vnet', 'AzureFirewallSubnet')]",
+                "[resourceId('Microsoft.Network/firewallPolicies', 'ev-hub-fw-policy')]"
+            ],
+            "properties": {
+                "sku": {
+                    "name": "AZFW_VNet",
+                    "tier": "Premium"
+                },
+                "threatIntelMode": "Alert",
+                "additionalProperties": {},
+                "ipConfigurations": [
+                    {
+                        "name": "ev-hub-fw-pip",
+                        "properties": {
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', 'ev-hub-fw-pip')]"
+                            },
+                            "subnet": {
+                                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', 'ev-hub-fw-vnet', 'AzureFirewallSubnet')]"
+                            }
+                        }
+                    }
+                ],
+                "networkRuleCollections": [],
+                "applicationRuleCollections": [],
+                "natRuleCollections": [],
+                "firewallPolicy": {
+                    "id": "[resourceId('Microsoft.Network/firewallPolicies', 'ev-hub-fw-policy')]"
+                }
+            }
+        }
+    ]
+}

@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echoserver
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: echoserver
+  template:
+    metadata:
+      labels:
+        run: echoserver
+    spec:
+            containers:
+            - name: echoserver
+              image: gcr.io/google_containers/echoserver:1.10
+              ports:
+              - containerPort: 8080
+              resources:
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echoserver
+  namespace: default
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    run: echoserver

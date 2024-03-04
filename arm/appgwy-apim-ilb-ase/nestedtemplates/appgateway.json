@@ -1,0 +1,381 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "suffix": {
+            "type": "string"
+        },
+        "skuName": {
+            "type": "string",
+            "defaultValue": "Standard"
+        },
+        "tier": {
+            "type": "string",
+            "defaultValue": "Regional"
+        },
+        "gatewaySku": {
+            "type": "object",
+            "defaultValue": {
+                "name": "WAF_v2",
+                "tier": "WAF_v2",
+                "capacity": "1"
+            }
+        },
+        "subnetId": {
+            "type": "string"
+        },
+        "apimPortalSslCert": {
+            "type": "string"
+        },
+        "apimGatewaySslCert": {
+            "type": "string"
+        },
+        "frontEndPort": {
+            "type": "int",
+            "defaultValue": 443
+        },
+        "requestTimeOut": {
+            "type": "int",
+            "defaultValue": 180
+        },
+        "apimGatewayHostName": {
+            "type": "string",
+            "defaultValue": "api.kainiindustries.net"
+        },
+        "apimPortalHostName": {
+            "type": "string",
+            "defaultValue": "portal.kainiindustries.net"
+        },
+        "apimPrivateIpAddress": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "pipName": "[concat('appgwy-pip', '-', parameters('suffix'))]",
+        "pipDomainName": "[variables('appGwyName')]",
+        "appGwyName": "[concat('appgwy', '-', parameters('suffix'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2018-12-01",
+            "name": "[variables('pipName')]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "[parameters('skuName')]",
+                "tier": "[parameters('tier')]"
+            },
+            "properties": {
+                "dnsSettings": {
+                    "domainNameLabel": "[variables('pipDomainName')]"
+                },
+                "publicIPAddressVersion": "IPv4",
+                "publicIPAllocationMethod": "Static",
+                "idleTimeoutInMinutes": 4,
+                "ipTags": [
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/applicationGateways",
+            "apiVersion": "2018-12-01",
+            "name": "[variables('appGwyName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+            ],
+            "properties": {
+                "sku": "[parameters('gatewaySku')]",
+                "gatewayIPConfigurations": [
+                    {
+                        "name": "gateway-ip",
+                        "type": "Microsoft.Network/applicationGateways/gatewayIPConfigurations",
+                        "properties": {
+                            "subnet": {
+                                "id": "[parameters('subnetId')]"
+                            }
+                        }
+                    }
+                ],
+                "sslCertificates": [
+                    {
+                        "name": "apimGatewayCert",
+                        "type": "Microsoft.Network/applicationGateways/sslCertificates",
+                        "properties": {
+                            "data": "[parameters('apimPortalSslCert')]"
+                        }
+                    },
+                    {
+                        "name": "apimPortalCert",
+                        "type": "Microsoft.Network/applicationGateways/sslCertificates",
+                        "properties": {
+                            "data": "[parameters('apimGatewaySslCert')]"
+                        }
+                    }
+                ],
+                /* "authenticationCertificates": [
+                    {
+                        "name": "whitelistcert",
+                        "type": "Microsoft.Network/applicationGateways/authenticationCertificates",
+                        "properties": {
+                            "data": "[parameters('apimPortalSslCert')]"
+                        }
+                    }
+                ], */
+                "frontendIPConfigurations": [
+                    {
+                        "name": "frontend",
+                        "type": "Microsoft.Network/applicationGateways/frontendIPConfigurations",
+                        "properties": {
+                            "privateIPAllocationMethod": "Dynamic",
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+                            }
+                        }
+                    }
+                ],
+                "frontendPorts": [
+                    {
+                        "name": "frontend-port",
+                        "type": "Microsoft.Network/applicationGateways/frontendPorts",
+                        "properties": {
+                            "port": "[parameters('frontEndPort')]"
+                        }
+                    }
+                ],
+                "backendAddressPools": [
+                    {
+                        "name": "apim-backend",
+                        "type": "Microsoft.Network/applicationGateways/backendAddressPools",
+                        "properties": {
+                            "backendAddresses": [
+                                {
+                                    "ipAddress": "[parameters('apimPrivateIpAddress')]"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "name": "sinkpool",
+                        "type": "Microsoft.Network/applicationGateways/backendAddressPools",
+                        "properties": {
+                            "backendAddresses": [
+                            ]
+                        }
+                    }
+                ],
+                "backendHttpSettingsCollection": [
+                    {
+                        "name": "apim-gateway-poolsetting",
+                        "type": "Microsoft.Network/applicationGateways/backendHttpSettingsCollection",
+                        "properties": {
+                            "port": "[parameters('frontEndPort')]",
+                            "protocol": "Https",
+                            "cookieBasedAffinity": "Disabled",
+                            "pickHostNameFromBackendAddress": false,
+                            "requestTimeout": "[parameters('requestTimeOut')]",
+                            "probe": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/probes/apim-gateway-probe')]"
+                            }
+                            /* "authenticationCertificates": [
+                                {
+                                    "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/authenticationCertificates/whitelistcert')]"
+                                }
+                            ] */
+                        }
+                    },
+                    {
+                        "name": "apim-portal-poolsetting",
+                        "type": "Microsoft.Network/applicationGateways/backendHttpSettingsCollection",
+                        "properties": {
+                            "port": "[parameters('frontEndPort')]",
+                            "protocol": "Https",
+                            "cookieBasedAffinity": "Disabled",
+                            "pickHostNameFromBackendAddress": false,
+                            "requestTimeout": "[parameters('requestTimeOut')]",
+                            "probe": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/probes/apim-portal-probe')]"
+                            }
+                            /* "authenticationCertificates": [
+                                {
+                                    "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/authenticationCertificates/whitelistcert')]"
+                                }
+                            ] */
+                        }
+                    }
+                ],
+                "httpListeners": [
+                    {
+                        "name": "apim-gateway-listener",
+                        "type": "Microsoft.Network/applicationGateways/httpListeners",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/frontendIPConfigurations/frontend')]"
+                            },
+                            "frontendPort": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/frontendPorts/frontend-port')]"
+                            },
+                            "protocol": "Https",
+                            "sslCertificate": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/sslCertificates/apimGatewayCert')]"
+                            },
+                            "hostName": "[parameters('apimGatewayHostName')]",
+                            "requireServerNameIndication": true,
+                            "customErrorConfigurations": [
+                            ]
+                        }
+                    },
+                    {
+                        "name": "apim-portal-listener",
+                        "type": "Microsoft.Network/applicationGateways/httpListeners",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/frontendIPConfigurations/frontend')]"
+                            },
+                            "frontendPort": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/frontendPorts/frontend-port')]"
+                            },
+                            "protocol": "Https",
+                            "sslCertificate": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/sslCertificates/apimPortalCert')]"
+                            },
+                            "hostName": "[parameters('apimPortalHostName')]",
+                            "requireServerNameIndication": true,
+                            "customErrorConfigurations": [
+                            ]
+                        }
+                    }
+                ],
+                "urlPathMaps": [
+                    {
+                        "name": "external-urlpathmapconfig",
+                        "type": "Microsoft.Network/applicationGateways/urlPathMaps",
+                        "properties": {
+                            "defaultBackendAddressPool": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/backendAddressPools/sinkpool')]"
+                            },
+                            "defaultBackendHttpSettings": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/backendHttpSettingsCollection/apim-gateway-poolsetting')]"
+                            },
+                            "pathRules": [
+                                {
+                                    "name": "external",
+                                    "type": "Microsoft.Network/applicationGateways/urlPathMaps/pathRules",
+                                    "properties": {
+                                        "paths": [
+                                            "/external/*"
+                                        ],
+                                        "backendAddressPool": {
+                                            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/backendAddressPools/apim-backend')]"
+                                        },
+                                        "backendHttpSettings": {
+                                            "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/backendHttpSettingsCollection/apim-gateway-poolsetting')]"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "requestRoutingRules": [
+                    {
+                        "name": "apim-portal-rule",
+                        "type": "Microsoft.Network/applicationGateways/requestRoutingRules",
+                        "properties": {
+                            "ruleType": "Basic",
+                            "httpListener": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/httpListeners/apim-portal-listener')]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/backendAddressPools/apim-backend')]"
+                            },
+                            "backendHttpSettings": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/backendHttpSettingsCollection/apim-portal-poolsetting')]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "apim-gateway-external-rule",
+                        "type": "Microsoft.Network/applicationGateways/requestRoutingRules",
+                        "properties": {
+                            "ruleType": "PathBasedRouting",
+                            "httpListener": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/httpListeners/apim-gateway-listener')]"
+                            },
+                            "urlPathMap": {
+                                "id": "[concat(resourceId('Microsoft.Network/applicationGateways', variables('appGwyName')), '/urlPathMaps/external-urlpathmapconfig')]"
+                            }
+                        }
+                    }
+                ],
+                "probes": [
+                    {
+                        "name": "apim-gateway-probe",
+                        "type": "Microsoft.Network/applicationGateways/probes",
+                        "properties": {
+                            "protocol": "Https",
+                            "host": "[parameters('apimGatewayHostName')]",
+                            "path": "/status-0123456789abcdef",
+                            "interval": 30,
+                            "timeout": 120,
+                            "unhealthyThreshold": 8,
+                            "pickHostNameFromBackendHttpSettings": false,
+                            "minServers": 0,
+                            "match": {
+                            }
+                        }
+                    },
+                    {
+                        "name": "apim-portal-probe",
+                        "type": "Microsoft.Network/applicationGateways/probes",
+                        "properties": {
+                            "protocol": "Https",
+                            "host": "[parameters('apimPortalHostName')]",
+                            "path": "/signin",
+                            "interval": 60,
+                            "timeout": 300,
+                            "unhealthyThreshold": 8,
+                            "pickHostNameFromBackendHttpSettings": false,
+                            "minServers": 0,
+                            "match": {
+                            }
+                        }
+                    }
+                ],
+                "rewriteRuleSets": [
+                ],
+                "redirectConfigurations": [
+                ],
+                "webApplicationFirewallConfiguration": {
+                    "enabled": true,
+                    "firewallMode": "Prevention",
+                    "ruleSetType": "OWASP",
+                    "ruleSetVersion": "3.0",
+                    "disabledRuleGroups": [
+                    ],
+                    "exclusions": [
+                    ],
+                    "requestBodyCheck": true,
+                    "maxRequestBodySizeInKb": 128,
+                    "fileUploadLimitInMb": 100
+                },
+                "customErrorConfigurations": [
+                ]
+            }
+        }
+    ],
+    "outputs": {
+        "appGwyID": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.Network/applicationGateways', variables('appGwyName'))]"
+        },
+        "appGatewayPublicDnsName": {
+            "type": "string",
+            "value": "[reference(variables('pipName')).dnsSettings.fqdn]"
+        },
+        "appGatewayPublicIpAddress": {
+            "type": "string",
+            "value": "[reference(variables('pipName')).ipAddress]"
+        }
+    }
+}

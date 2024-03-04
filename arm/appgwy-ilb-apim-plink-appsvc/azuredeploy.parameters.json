@@ -1,0 +1,148 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"vNets": {
+			"value": [
+				{
+					"name": "hub-vnet",
+					"addressPrefixes": [
+						"10.1.0.0/16"
+					],
+					"subnets": [
+						{
+							"name": "AppGwySubnet",
+							"addressPrefix": "10.1.2.0/24",
+							"udrName": "appgwy",
+							"nsgName": "app-gwy-subnet",
+							"serviceEndpoints": null,
+							"privateEndpointNetworkPolicies": null,
+							"delegations": null
+						},
+						{
+							"name": "ApiMgmtSubnet",
+							"addressPrefix": "10.1.3.0/24",
+							"udrName": "apim",
+							"nsgName": "apim-subnet",
+							"serviceEndpoints": [
+								{
+									"service": "Microsoft.Web",
+									"locations": [
+										"*"
+									]
+								}
+							],
+							"privateEndpointNetworkPolicies": null,
+							"delegations": null
+						},
+						{
+							"name": "InfraSubnet",
+							"addressPrefix": "10.1.4.0/24",
+							"udrName": null,
+							"nsgName": null,
+							"serviceEndpoints": null,
+							"privateEndpointNetworkPolicies": null,
+							"delegations": null
+						},
+						{
+							"name": "AzureFirewallSubnet",
+							"addressPrefix": "10.1.5.0/24",
+							"udrName": null,
+							"nsgName": null,
+							"serviceEndpoints": null,
+							"privateEndpointNetworkPolicies": null,
+							"delegations": null
+						},
+						{
+							"name": "GatewaySubnet",
+							"addressPrefix": "10.1.6.0/24",
+							"udrName": null,
+							"nsgName": null,
+							"serviceEndpoints": null,
+							"privateEndpointNetworkPolicies": null,
+							"delegations": null
+						}
+					]
+				},
+				{
+					"name": "spoke-vnet",
+					"addressPrefixes": [
+						"10.2.0.0/16"
+					],
+					"subnets": [
+						{
+							"name": "AppServiceSubnet1",
+							"addressPrefix": "10.2.1.0/24",
+							"udrName": "spoke-to-hub",
+							"nsgName": null,
+							"serviceEndpoints": null,
+							"privateEndpointNetworkPolicies": null,
+							"delegations": [
+								{
+									"name": "delegation",
+									"properties": {
+										"serviceName": "Microsoft.Web/serverfarms",
+										"actions": [
+											"Microsoft.Network/virtualNetworks/subnets/action"
+										]
+									},
+									"type": "Microsoft.Network/virtualNetworks/subnets/delegations"
+								}
+							]
+						},
+						{
+							"name": "AppServiceSubnet2",
+							"addressPrefix": "10.2.2.0/24",
+							"udrName": "spoke-to-hub",
+							"nsgName": null,
+							"serviceEndpoints": null,
+							"privateEndpointNetworkPolicies": null,
+							"delegations": [
+								{
+									"name": "delegation",
+									"properties": {
+										"serviceName": "Microsoft.Web/serverfarms",
+										"actions": [
+											"Microsoft.Network/virtualNetworks/subnets/action"
+										]
+									},
+									"type": "Microsoft.Network/virtualNetworks/subnets/delegations"
+								}
+							]
+						},
+						{
+							"name": "AppServicePrivateLinkSubnet",
+							"addressPrefix": "10.2.3.0/24",
+							"udrName": "spoke-to-hub",
+							"nsgName": null,
+							"serviceEndpoints": null,
+							"privateEndpointNetworkPolicies": "Disabled",
+							"delegations": []
+						}
+					]
+				}
+			]
+		},
+		"deploymentMode": {
+			"value": "Incremental"
+		},
+		"storageUri": {
+			"value": null
+		},
+		"sasToken": {
+			"value": null
+		},
+		"tags": {
+			"value": {
+				"costCenter": "123456789",
+				"dept": "it"
+			}
+		},
+		"keyVaultUri": {
+			"value": null
+		},
+		"keyVaultName": {
+			"value": null
+		}
+	}
+}

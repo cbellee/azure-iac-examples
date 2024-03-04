@@ -1,0 +1,99 @@
+# specific path build
+trigger:
+  branches:
+    include:
+    - master
+    - develop
+  paths:
+    include:
+    - terraform/aks-architecture-example/terraform/*
+    exclude:
+    - terraform/aks-architecture-example/azure-pipelines.yml
+
+variables:
+  # ADO_SERVICE_CONNECTION_NAME: # variable set in variable group 'aks_terraform_vars'
+  # ON_PREMISES_ROUTER_DNS_HOST_NAME # variable set in variable group 'aks_terraform_vars'
+  # SSH_KEY # variable set in variable group 'aks_terraform_vars'
+  # SHARED_VPN_SECRET # variable set in variable group 'aks_terraform_vars'
+  # TF_STATE_STORAGE_ACCOUNT_NAME # variable set in variable group 'aks_terraform_vars'
+  - group: aks_terraform_vars
+  - name: TF_PATH
+    value: ./terraform/aks-architecture-example/terraform
+
+stages:
+- stage: dev
+  displayName: 'Deploy infrastructure to the dev environment'
+  jobs:
+  - deployment: deploy_aks_infra
+    displayName: deploy AKS infrastructure
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: aks-private-fw
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - task: AzureCLI@2
+            displayName: 'Setup authentication for Terraform'
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              addSpnToEnvironment: true # ensures 'servicePrincipalId' & 'servicePrincipalKey' values are available to Terraform
+              failOnStandardError: true
+              scriptLocation: inlineScript
+              scriptType: pscore
+              inlineScript: |   
+                # set Terraform authN variables
+                Write-Host "##vso[task.setvariable variable=ARM_SUBSCRIPTION_ID]$(az account show | ConvertFrom-Json | Select-Object -expandProperty id)"
+                Write-Host "##vso[task.setvariable variable=ARM_CLIENT_ID]$env:servicePrincipalId"
+                Write-Host "##vso[task.setvariable variable=ARM_CLIENT_SECRET]$env:servicePrincipalKey"
+                Write-Host "##vso[task.setvariable variable=ARM_TENANT_ID]$(az account show | ConvertFrom-Json | Select-Object -expandProperty tenantId)"
+                Write-Host "##vso[task.setvariable variable=ARM_ACCESS_KEY]$((az storage account keys list -n $(TF_STATE_STORAGE_ACCOUNT_NAME) | ConvertFrom-Json)[0].value)"
+          - task: PowerShell@2
+            displayName: 'Get on-premises router public IP'
+            inputs:
+              targetType: inline
+              pwsh: true
+              script: |
+                $routerIpAddress = $([System.Net.Dns]::GetHostAddresses("$(ON_PREMISES_ROUTER_DNS_HOST_NAME)")).IPAddressToString
+                Write-Host "##vso[task.setvariable variable=ON_PREMISES_ROUTER_PUBLIC_IP_ADDRESS]$routerIpAddress"
+          - task: AzureCLI@2
+            displayName: 'Deploy AKS Infrastructure'
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              workingDirectory: $(TF_PATH)
+              inlineScript: |               
+                # Initialize Terraform
+                Write-Host "############# Terraform init ############"
+                terraform init -input=false
+
+                # Create plan
+                Write-Host "############# Terraform plan ############"
+                terraform plan -var 'on_premises_router_public_ip_address=$(ON_PREMISES_ROUTER_PUBLIC_IP_ADDRESS)' -var 'ssh_key=$(SSH_KEY)' -var 'shared_vpn_secret=$(SHARED_VPN_SECRET)' -out tfplan 
+
+                # Show plan
+                Write-Host "############# Terraform show ############"
+                $plan = terraform show -json | ConvertFrom-Json
+                Write-Host $plan.values
+
+                # Apply plan
+                Write-Host "############# Terraform apply ############"
+                terraform apply -auto-approve tfplan 
+
+                # Output apply
+                # Set Terraform output as pipeline environment variables
+                Write-Host "############# Terraform output ############"
+                $tfOutput = terraform output -json | ConvertFrom-Json
+                Write-Host "##vso[task.setvariable variable=PROD_CLUSTER_NAME]$($tfOutput.'prod-aks-cluster-name'.value)"
+                Write-Host "##vso[task.setvariable variable=NON_PROD_CLUSTER_NAME]$($tfOutput.'nonprod-aks-cluster-name'.value)"
+                Write-Host "##vso[task.setvariable variable=PROD_CLUSTER_RESOURCE_GROUP_NAME]$($tfOutput.'prod-aks-node-rg'.value)"
+                Write-Host "##vso[task.setvariable variable=NON_PROD_CLUSTER_RESOURCE_GROUP_NAME]$($tfOutput.'nonprod-aks-node-rg'.value)"
+                Write-Host "##vso[task.setvariable variable=PROD_CLUSTER_ID]$($tfOutput.'prod-aks-cluster-id'.value)"
+                Write-Host "##vso[task.setvariable variable=NON_PROD_CLUSTER_ID]$($tfOutput.'nonprod-aks-cluster-id'.value)"
+                Write-Host "##vso[task.setvariable variable=KUBECONFIG]$($tfOutput.'kube-config'.value)"     
+                Write-Host "##vso[task.setvariable variable=HUB_VNET_ID]$($tfOutput.'hub-vnet-id'.value)"     
+                Write-Host "##vso[task.setvariable variable=PROD_SPOKE_VNET_ID]$($tfOutput.'prod-spoke-vnet-id'.value)"  
+                Write-Host "##vso[task.setvariable variable=NON_PROD_SPOKE_VNET_ID]$($tfOutput.'nonprod-spoke-vnet-id'.value)"  
+          

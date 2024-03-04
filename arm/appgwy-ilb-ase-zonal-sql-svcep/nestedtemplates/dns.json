@@ -1,0 +1,46 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2019-08-01/tenantDeploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"zoneName": {
+			"type": "string"
+		},
+		"dnsName": {
+			"type": "string",
+			"defaultValue": "api"
+		},
+		"publicIpAddressId": {
+			"type": "string"
+		}
+	},
+	"functions": [],
+	"variables": {},
+	"resources": [
+		{
+			"name": "[parameters('zoneName')]",
+			"type": "Microsoft.Network/dnsZones",
+			"apiVersion": "2018-05-01",
+			"location": "global"
+		},
+		{
+			"name": "[concat(parameters('zoneName'), '/', parameters('dnsName'))]",
+			"type": "Microsoft.Network/dnsZones/A",
+			"apiVersion": "2018-05-01",
+			"dependsOn": [
+				"[parameters('zoneName')]"
+			],
+			"properties": {
+				"TTL": 3600,
+				"targetResource": {
+					"id": "[parameters('publicIpAddressId')]"
+				}
+			}
+		}
+	],
+	"outputs": {
+		"url": {
+			"type": "string",
+			"value": "[concat('https://', parameters('dnsName'), '.', parameters('zoneName'))]"
+		}
+	}
+}

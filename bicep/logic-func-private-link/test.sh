@@ -1,0 +1,1 @@
+curl -H 'Content-Type: application/json' -X POST 'https://cbellee-logic-1.azurewebsites.net:443/api/test-wf-1/triggers/When_a_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_a_HTTP_request_is_received%2Frun&sv=1.0&sig=I1hkh3gs5DTTyPH4d8ww2fQvulOuj_4-24ziGVvqK0U' -d '{"name":"Chris"}' -v

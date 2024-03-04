@@ -1,0 +1,12 @@
+apiVersion: azure.sql.database.example.org/v1alpha1
+kind: XAzureSQLDBInstance
+metadata:
+  name: my-db
+spec:
+  parameters:
+    storageGB: 20
+  compositionRef:
+    name: production
+  writeConnectionSecretToRef:
+    namespace: crossplane-system
+    name: my-db-connection-details

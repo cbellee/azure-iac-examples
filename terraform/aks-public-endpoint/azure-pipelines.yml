@@ -1,0 +1,161 @@
+# specific path build
+trigger:
+  branches:
+    include:
+    - master
+    - develop
+  paths:
+    include:
+    - terraform/aks-public-endpoint/terraform/*
+    exclude:
+    - terraform/aks-public-endpoint/azure-pipelines.yml
+
+variables:
+  # ADO_SERVICE_CONNECTION_NAME: # variable set in variable group 'aks_terraform_vars'
+  # SSH_KEY # variable set in variable group 'aks_terraform_vars'
+  # TF_STATE_STORAGE_ACCOUNT_NAME # variable set in variable group 'aks_terraform_vars'
+  - group: aks_terraform_vars
+  - name: TF_PATH
+    value: ./terraform/aks-public-endpoint/terraform
+  - name: LOCATION
+    value: eastus
+  - name: NAMESPACE
+    value: dev
+  - name: FLUX_NAMESPACE
+    value: flux
+  - name: AZURE_DNS_ZONE_RG
+    value: external-dns-zones-rg
+  - name: AZURE_DNS_ZONE
+    value: kainiindustries.net
+
+stages:
+- stage: dev
+  displayName: 'Deploy infrastructure to the dev environment'
+  jobs:
+  - deployment: deploy_aks_infra
+    displayName: deploy AKS infrastructure
+    pool:
+      vmImage: ubuntu-latest
+    environment: aks-public-endpoint-tf
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - task: AzureCLI@2
+            displayName: 'Setup authentication for Terraform'
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              addSpnToEnvironment: true # ensures 'servicePrincipalId' & 'servicePrincipalKey' values are available to Terraform
+              failOnStandardError: true
+              scriptLocation: inlineScript
+              scriptType: pscore
+              inlineScript: |   
+                # set Terraform authN variables
+                Write-Host "##vso[task.setvariable variable=ARM_SUBSCRIPTION_ID]$(az account show | ConvertFrom-Json | Select-Object -expandProperty id)"
+                Write-Host "##vso[task.setvariable variable=ARM_CLIENT_ID]$env:servicePrincipalId"
+                Write-Host "##vso[task.setvariable variable=ARM_CLIENT_SECRET]$env:servicePrincipalKey"
+                Write-Host "##vso[task.setvariable variable=ARM_TENANT_ID]$(az account show | ConvertFrom-Json | Select-Object -expandProperty tenantId)"
+                Write-Host "##vso[task.setvariable variable=ARM_ACCESS_KEY]$((az storage account keys list -n $(TF_STATE_STORAGE_ACCOUNT_NAME) | ConvertFrom-Json)[0].value)"
+          - task: AzureCLI@2
+            displayName: 'Deploy AKS Infrastructure'
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              workingDirectory: $(TF_PATH)
+              inlineScript: |               
+                # Initialize Terraform
+                Write-Host "############# Terraform init ############"
+                terraform init -input=false
+
+                # Create plan
+                Write-Host "############# Terraform plan ############"
+                terraform plan -var 'ssh_key=$(SSH_KEY)' -var 'location=$(LOCATION)' -out tfplan 
+
+                # Show plan
+                Write-Host "############# Terraform show ############"
+                $plan = terraform show -json | ConvertFrom-Json
+                Write-Host $plan.values
+
+                # Apply plan
+                Write-Host "############# Terraform apply ############"
+                terraform apply -auto-approve tfplan 
+
+                # Output apply
+                # Set Terraform output as pipeline environment variables
+                Write-Host "############# Terraform output ############"
+                $tfOutput = terraform output -json | ConvertFrom-Json
+                Write-Host "##vso[task.setvariable variable=RESOURCE_GROUP_NAME]$($tfOutput.'resource-group-name'.value)"
+                Write-Host "##vso[task.setvariable variable=CLUSTER_NAME]$($tfOutput.'aks-cluster-name'.value)"
+                Write-Host "##vso[task.setvariable variable=CLUSTER_RESOURCE_GROUP_NAME]$($tfOutput.'aks-node-rg'.value)"
+                Write-Host "##vso[task.setvariable variable=CLUSTER_ID]$($tfOutput.'aks-cluster-id'.value)"
+                Write-Host "##vso[task.setvariable variable=KUBECONFIG]$($tfOutput.'kube-config'.value)"     
+                Write-Host "##vso[task.setvariable variable=HUB_VNET_ID]$($tfOutput.'hub-vnet-id'.value)"     
+                Write-Host "##vso[task.setvariable variable=SPOKE_VNET_ID]$($tfOutput.'spoke-vnet-id'.value)"       
+                Write-Host "##vso[task.setvariable variable=ACR_NAME]$($tfOutput.'acr-name'.value)"           
+          - task: AzureCLI@2
+            displayName: Deploy Flux controller
+            enabled: false
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              scriptLocation: inlineScript
+              scriptType: bash
+              inlineScript: |
+                AZURE_TENANT_ID=$(az account show --query '[tenantId]' -o tsv)
+                AZURE_SUBSCRIPTION_ID=$(az account show --query '[id]' -o tsv)
+                CLUSTER_MANAGED_IDENTITY_OBJECT_ID=$(az aks show -g $(RESOURCE_GROUP_NAME) --name $(CLUSTER_NAME) --query '[identityProfile.[kubeletidentity.objectId]]' -o tsv)
+                CLUSTER_MANAGED_IDENTITY_APP_ID=$(az aks show -g $(RESOURCE_GROUP_NAME) --name $(CLUSTER_NAME) --query '[identityProfile.[kubeletidentity.clientId]]' -o tsv)
+                
+                echo "getting aks kubeconfig file"
+                az aks get-credentials -g $(RESOURCE_GROUP_NAME) -n $(CLUSTER_NAME)
+                KUBECONFIG=/home/vsts/.kube/config
+
+                echo "installing fluxctl"
+                sudo snap install fluxctl --classic
+
+                echo "integrating AKS cluster: '$CLUSTER_NAME' with Azure Container Registry: '$ACR_NAME'"
+                az aks update -n $CLUSTER_NAME -g $RESOURCE_GROUP_NAME --attach-acr $ACR_NAME
+                
+                # echo "deploy aad pod identity"
+                # helm repo add aad-pod-identity https://raw.githubusercontent.com/Azure/aad-pod-identity/master/charts
+                # helm install aad-pod-identity aad-pod-identity/aad-pod-identity
+                
+                # echo "deploy external-dns"
+                # helm repo add bitnami https://charts.bitnami.com/bitnami
+                # helm install azure-external-dns -f values.yml bitnami/external-dns
+                
+                echo "apply role assignments for DNS zone"
+                DNS_ZONE_RESOURCE_ID=$(az network dns zone show --name $AZURE_DNS_ZONE --resource-group $AZURE_DNS_ZONE_RG --query id --output tsv)
+                echo "DNS Zone ID: $DNS_ZONE_RESOURCE_ID"
+                az role assignment create --role "Contributor" --assignee $CLUSTER_MANAGED_IDENTITY_APP_ID --scope $DNS_ZONE_RESOURCE_ID
+                az role assignment list --assignee $CLUSTER_MANAGED_IDENTITY_APP_ID --scope $DNS_ZONE_RESOURCE_ID
+                
+                echo "deploy NGINX ingress controller"
+                helm repo add stable https://kubernetes-charts.storage.googleapis.com/
+                helm install nginx-ingress stable/nginx-ingress \
+                  --namespace $NAMESPACE \
+                  --set controller.replicaCount=2 \
+                  --set controller.nodeSelector."beta\.kubernetes\.io/os"=linux \
+                  --set defaultBackend.nodeSelector."beta\.kubernetes\.io/os"=linux
+                
+                echo "deploy flux operator"
+                helm repo add fluxcd https://charts.fluxcd.io
+                kubectl apply -f https://raw.githubusercontent.com/fluxcd/helm-operator/master/deploy/crds.yaml
+                kubectl create namespace $FLUX_NAMESPACE
+                
+                echo "deploy flux controller"
+                helm upgrade -i flux fluxcd/flux \
+                  --set git.url=git@github.com:cbellee/flux-cd \
+                  --set git.path=clusters/dev \
+                  --namespace $FLUX_NAMESPACE
+                
+                echo "deploy helm controller"
+                helm upgrade -i helm-operator fluxcd/helm-operator \
+                  --set git.ssh.secretName=flux-git-deploy \
+                  --namespace $FLUX_NAMESPACE \
+                  --set helm.versions=v3
+                
+                echo "display public key & add to Git Repo 'Deploy Keys'"
+                fluxctl identity --k8s-fwd-ns $FLUX_NAMESPACE
+                

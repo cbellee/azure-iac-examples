@@ -1,0 +1,109 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"administratorLogin": {
+			"type": "string"
+		},
+		"administratorLoginPassword": {
+			"type": "securestring"
+		},
+		"location": {
+			"type": "string"
+		},
+		"serverName": {
+			"type": "string"
+		},
+		"skuCapacity": {
+			"type": "int",
+			"defaultValue": 4
+		},
+		"skuFamily": {
+			"type": "string",
+			"defaultValue": "Gen5"
+		},
+		"skuName": {
+			"type": "string",
+			"defaultValue": "GP_Gen5_4"
+		},
+		"skuSizeMB": {
+			"type": "int",
+			"defaultValue": 102400
+		},
+		"skuTier": {
+			"type": "string",
+			"defaultValue": "GeneralPurpose"
+		},
+		"version": {
+			"type": "string",
+			"defaultValue": "5.7"
+		},
+		"backupRetentionDays": {
+			"type": "int",
+			"defaultValue": 7
+		},
+		"geoRedundantBackup": {
+			"type": "string",
+			"allowedValues": [
+				"Enabled",
+				"Disabled"
+			],
+			"defaultValue": "Enabled"
+		},
+		"previewFeature": {
+			"type": "string",
+			"defaultValue": ""
+		},
+		"tags": {
+			"type": "object",
+			"defaultValue": {}
+		},
+		"storageAutoGrow": {
+			"type": "string",
+			"allowedValues": [
+				"Enabled",
+				"Disabled"
+			],
+			"defaultValue": "Enabled"
+		},
+		"infrastructureEncryption": {
+			"type": "string",
+			"allowedValues": [
+				"Enabled",
+				"Disabled"
+			],
+			"defaultValue": "Disabled"
+		}
+	},
+	"resources": [
+		{
+			"apiVersion": "2017-12-01-preview",
+			"kind": "",
+			"location": "[parameters('location')]",
+			"name": "[parameters('serverName')]",
+			"properties": {
+				"version": "[parameters('version')]",
+				"administratorLogin": "[parameters('administratorLogin')]",
+				"administratorLoginPassword": "[parameters('administratorLoginPassword')]",
+				"storageProfile": {
+					"storageMB": "[parameters('skuSizeMB')]",
+					"backupRetentionDays": "[parameters('backupRetentionDays')]",
+					"geoRedundantBackup": "[parameters('geoRedundantBackup')]",
+					"storageAutoGrow": "[parameters('storageAutoGrow')]"
+				},
+				"previewFeature": "[parameters('previewFeature')]",
+				"infrastructureEncryption": "[parameters('infrastructureEncryption')]"
+			},
+			"sku": {
+				"name": "[parameters('skuName')]",
+				"tier": "[parameters('skuTier')]",
+				"capacity": "[parameters('skuCapacity')]",
+				"size": "[parameters('skuSizeMB')]",
+				"family": "[parameters('skuFamily')]"
+			},
+			"tags": "[parameters('tags')]",
+			"type": "Microsoft.DBforMySQL/servers"
+		}
+	],
+	"variables": {}
+}

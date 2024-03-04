@@ -1,0 +1,102 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"aseApplications": {
+			"type": "object"
+		}
+	},
+	"variables": {},
+	"resources": [
+		{
+			"type": "Microsoft.Network/privateDnsZones",
+			"apiVersion": "2018-09-01",
+			"name": "[parameters('aseApplications').backends[copyIndex('zoneCopy')].asefqdn]",
+			"location": "global",
+			"copy": {
+				"name": "zoneCopy",
+				"count": "[length(parameters('aseApplications').backends)]"
+			}
+		},
+		{
+			"type": "Microsoft.Network/privateDnsZones/A",
+			"apiVersion": "2018-09-01",
+			"name": "[concat(parameters('aseApplications').backends[copyIndex('recordCopy')].asefqdn, '/', '*')]",
+			"copy": {
+				"name": "recordCopy",
+				"count": "[length(parameters('aseApplications').backends)]"
+			},
+			"dependsOn": [
+				"zoneCopy"
+			],
+			"properties": {
+				"ttl": 3600,
+				"aRecords": [
+					{
+						"ipv4Address": "[parameters('aseApplications').backends[copyIndex('recordCopy')].ip]"
+					}
+				]
+			}
+		},
+				{
+			"type": "Microsoft.Network/privateDnsZones/A",
+			"apiVersion": "2018-09-01",
+			"name": "[concat(parameters('aseApplications').backends[copyIndex('recordCopy')].asefqdn, '/', '@')]",
+			"copy": {
+				"name": "recordCopy",
+				"count": "[length(parameters('aseApplications').backends)]"
+			},
+			"dependsOn": [
+				"zoneCopy"
+			],
+			"properties": {
+				"ttl": 3600,
+				"aRecords": [
+					{
+						"ipv4Address": "[parameters('aseApplications').backends[copyIndex('recordCopy')].ip]"
+					}
+				]
+			}
+		},
+				{
+			"type": "Microsoft.Network/privateDnsZones/A",
+			"apiVersion": "2018-09-01",
+			"name": "[concat(parameters('aseApplications').backends[copyIndex('recordCopy')].asefqdn, '/', '*.scm')]",
+			"copy": {
+				"name": "recordCopy",
+				"count": "[length(parameters('aseApplications').backends)]"
+			},
+			"dependsOn": [
+				"zoneCopy"
+			],
+			"properties": {
+				"ttl": 3600,
+				"aRecords": [
+					{
+						"ipv4Address": "[parameters('aseApplications').backends[copyIndex('recordCopy')].ip]"
+					}
+				]
+			}
+		},
+		{
+			"type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+			"apiVersion": "2018-09-01",
+			"name": "[concat(parameters('aseApplications').backends[copyIndex('linkCopy')].asefqdn, '/', parameters('aseApplications').backends[copyIndex('linkCopy')].asefqdn, '-link')]",
+			"location": "global",
+			"copy": {
+				"name": "linkCopy",
+				"count": "[length(parameters('aseApplications').backends)]"
+			},
+			"dependsOn": [
+				"[parameters('aseApplications').backends[copyIndex('linkCopy')].asefqdn]"
+			],
+			"properties": {
+				"registrationEnabled": false,
+				"virtualNetwork": {
+					"id": "[parameters('aseApplications').backends[copyIndex('linkCopy')].aseVnetId]"
+				}
+			}
+		}
+	],
+	"outputs": {}
+}

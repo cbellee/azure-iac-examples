@@ -1,0 +1,46 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: internal-gateway
+spec:
+  selector:
+    istio: aks-istio-ingressgateway-internal
+  servers:
+    - port:
+        number: 443
+        name: https
+        protocol: HTTPS
+      hosts:
+        - internal.bellee.net
+      tls:
+        mode: SIMPLE
+        credentialName: tls-cert
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: go-server-vs-internal
+spec:
+  gateways:
+    - internal-gateway
+  hosts:
+    - internal.bellee.net
+  http:
+    - name: go-server-routes
+      match: 
+      - uri: 
+          prefix: "/hello"
+      route:
+        - destination:
+            host: go-server.default.svc.cluster.local
+            port:
+              number: 8080
+    - name: health-check
+      match: 
+      - uri: 
+          exact: "/healthz/ready"
+      route:
+      - destination:  
+          host: aks-istio-ingressgateway-internal.aks-istio-ingress.svc.cluster.local
+          port:
+            number: 15021

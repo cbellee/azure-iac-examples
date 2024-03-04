@@ -1,0 +1,103 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"vNets": {
+			"value": [
+				{
+					"name": "hub-vnet",
+					"addressPrefixes": [
+						"10.0.0.0/16"
+					],
+					"subnets": [
+						{
+							"name": "AzureFirewallSubnet",
+							"addressPrefix": "10.0.0.0/24",
+							"udrName": null,
+							"nsgName": null,
+							"privateEndpointNetworkPolicies": "Enabled",
+							"privateLinkServiceNetworkPolicies": "Enabled"
+						},
+						{
+							"name": "ManagementSubnet",
+							"addressPrefix": "10.0.1.0/24",
+							"udrName": "default-firewall",
+							"nsgName": null,
+							"privateEndpointNetworkPolicies": "Disabled",
+							"privateLinkServiceNetworkPolicies": "Enabled"
+						}
+					]
+				},
+				{
+					"name": "spoke-vnet",
+					"addressPrefixes": [
+						"10.1.0.0/16"
+					],
+					"subnets": [
+						{
+							"name": "AKSSubnet",
+							"addressPrefix": "10.1.0.0/24",
+							"udrName": "default-firewall",
+							"nsgName": null,
+							"privateEndpointNetworkPolicies": "Enabled",
+							"privateLinkServiceNetworkPolicies": "Enabled"
+						},
+						{
+							"name": "DBSubnet",
+							"addressPrefix": "10.1.1.0/24",
+							"udrName": "default-firewall",
+							"nsgName": null,
+							"privateEndpointNetworkPolicies": "Disabled",
+							"privateLinkServiceNetworkPolicies": "Enabled"
+						}
+					]
+				}
+			]
+		},
+		"deploymentMode": {
+			"value": "Incremental"
+		},
+		"aksVersion": {
+			"value": "1.18.8"
+		},
+		"aksNodeVmSize": {
+			"value": "Standard_D2_v2"
+		},
+		"aksNodeCount": {
+			"value": 1
+		},
+		"deployGateway": {
+			"value": false
+		},
+		"tags": {
+			"value": {
+				"environment": "dev",
+				"costCenter": "123456789",
+				"dept": "it"
+			}
+		},
+		"sshPublicKey": {
+			"value": null
+		},
+		"dbAdminPassword": {
+			"value": null
+		},
+		"aadAdminGroupObjectIds": {
+			"value": [
+				null
+			]
+		},
+		"aksMaxPodCount": {
+			"value": null
+		},
+		"adminUsername": {
+			"value": "localadmin"
+		},
+		"artifactsLocation": {
+			"value": null
+		},
+		"artifactsLocationSasToken": {
+			"value": null
+		}
+	}
+}

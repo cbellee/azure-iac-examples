@@ -1,0 +1,171 @@
+### spoke.yml ###
+trigger:
+  branches:
+    include:
+      - main
+      - master
+  paths:
+    include:
+      - bicep/hub-spoke-plink
+    exclude:
+      - bicep/hub-spoke-plink/pipelines
+      - bicep/hub-spoke-plink/modules
+      - bicep/hub-spoke-plink/README.md
+
+variables:
+  serviceCxn: 'internal_azure_subscription'
+  location: 'australiaeast'
+  mySqlAdminUserName: 'dbadmin'
+  mySqlAdminPassword: 'M1cr0soft1234567890'
+  hubResourceGroupName: 'test-hub-rg'
+  hubDeploymentName: 'hubDeployment'
+  #hubVnetName: 'hub-vnet'
+  #hubVnetId: '/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/test-hub-rg/providers/Microsoft.Network/virtualNetworks/hub-vnet'
+  targets: >
+    {
+      'internal-spoke':
+      {
+        'deploymentName': 'internal-spoke',
+        'resourceGroupName': 'int-spoke-rg',
+        'spokeVnetName': 'int-spoke-vnet',
+        'spokeVnetAddressPrefix': '10.1.0.0/16',
+        'plinkSubnetCIDR': '10.1.0.0/24',
+        'dbSubnetCIDR': '10.1.1.0/24',
+        'appSvcSubnetCIDR': '10.1.2.0/24',
+        'containerName': 'belstarr/go-web-api:v1.0'
+      },
+      'customer-1-spoke':
+      {
+        'deploymentName': 'customer-1-spoke',
+        'resourceGroupName': 'customer-1-spoke-rg',
+        'spokeVnetName': 'customer-1-spoke-vnet',
+        'spokeVnetAddressPrefix': '10.2.0.0/16',
+        'plinkSubnetCIDR': '10.2.0.0/24',
+        'dbSubnetCIDR': '10.2.1.0/24',
+        'appSvcSubnetCIDR': '10.2.2.0/24',
+        'containerName': 'belstarr/go-web-api:v1.0'
+      },
+      'customer-2-spoke':
+      {
+        'deploymentName': 'customer-2-spoke',
+        'resourceGroupName': 'customer-2-spoke-rg',
+        'spokeVnetName': 'customer-2-spoke-vnet',
+        'spokeVnetAddressPrefix': '10.3.0.0/16',
+        'plinkSubnetCIDR': '10.3.0.0/24',
+        'dbSubnetCIDR': '10.3.1.0/24',
+        'appSvcSubnetCIDR': '10.3.2.0/24',
+        'containerName': 'belstarr/go-web-api:v1.0'
+      }
+    }
+
+pool:
+  vmImage: 'ubuntu-latest'    
+
+stages:
+  - stage: build
+    displayName: 'compile bicep to ARM template'
+    jobs:
+      - job: compileBicepToARM
+        steps:
+
+          - task: AzureCLI@2
+            displayName: 'compile Bicep to ARM template'
+            inputs:
+              azureSubscription: $(serviceCxn)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                az bicep build --file ./bicep/hub-spoke-plink/spoke.bicep
+                az bicep build --file ./bicep/hub-spoke-plink/frontDoor.bicep
+
+          - task: CopyFiles@2
+            displayName: 'copy ARM template file to staging directory'
+            inputs:
+              SourceFolder: $(Build.SourcesDirectory)/bicep/hub-spoke-plink
+              Contents: '*.json'
+              TargetFolder: $(Build.ArtifactStagingDirectory)/templates
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'publish ARM template artifacts'
+            inputs:
+              ArtifactName: 'templates'
+              PathtoPublish: $(Build.ArtifactStagingDirectory)/templates
+
+  - stage: deploy
+    displayName: 'deploy spoke infrastructure'
+    jobs:
+
+      - job: deploySpokeInfra
+        displayName: 'deploy spoke'
+        strategy:
+          matrix: $[ variables.targets ]
+        steps:
+
+          - task: DownloadBuildArtifacts@0
+            displayName: 'download compiled ARM template'
+            inputs:
+              buildType: 'current'
+              downloadType: 'Single'
+              downloadPath: '$(Pipeline.Workspace)'
+              artifactName: 'templates'
+
+          - task: AzureCLI@2
+            displayName: 'deploy spoke infrastructure'
+            inputs:
+              azureSubscription: $(serviceCxn)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                az group create --name $(resourceGroupName) --location $(location)
+
+                $hubDeployment = az deployment group show --name $(hubDeploymentName) --resource-group $(hubResourceGroupName) | ConvertFrom-Json
+
+                az deployment group create `
+                  --name $(deploymentName) `
+                  --template-file $(Pipeline.Workspace)/templates/spoke.json `
+                  --resource-group $(resourceGroupName) `
+                  --parameters spokeVnetName=$(spokeVnetName) `
+                  --parameters mySqlAdminUserName=$(mySqlAdminUserName) `
+                  --parameters mySqlAdminPassword=$(mySqlAdminPassword) `
+                  --parameters hubVnetId=$($hubDeployment.properties.outputs.vnetId.value) `
+                  --parameters hubVnetName=$($hubDeployment.properties.outputs.vnetName.value) `
+                  --parameters hubVnetResourceGroup=$($hubDeployment.resourceGroup) `
+                  --parameters containerName=$(containerName) `
+                  --parameters spokeVnetAddressPrefix=$(spokeVnetAddressPrefix) `
+                  --parameter appSvcSubnetCIDR=$(appSvcSubnetCIDR) `
+                  --parameter dbSubnetCIDR=$(dbSubnetCIDR) `
+                  --parameter plinkSubnetCIDR=$(plinkSubnetCIDR)
+
+          - task: AzureCLI@2
+            displayName: 'add web app to Front door configuration'
+            inputs:
+              azureSubscription: $(serviceCxn)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                $hubDeployment = az deployment group show --name $(hubDeploymentName) --resource-group $hubDeployment.ResourceGroup | ConvertFrom-Json
+                $spokeDeployment = az deployment group show --name $(deploymentName) --resource-group $(resourceGroupName) | ConvertFrom-Json
+
+                az deployment group create `
+                --name $(deploymentName)-frontdoor `
+                --template-file ./frontDoor.json `
+                --resource-group $hubDeployment.resourceGroup `
+                --parameters backendAddress=$spokeDeployment.properties.outputs.webAppHostName
+
+          - task: AzureCLI@2
+            displayName: 'add frontDoor ID to web app access restriction'
+            inputs:
+              azureSubscription: $(serviceCxn)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                $frontDoorDeployment = az deployment group show --name $(deploymentName)-frontdoor --resource-group $hubDeployment.ResourceGroup | ConvertFrom-Json
+                
+                az webapp config access-restriction add `
+                  --resource-group $spokeDeployment.resourceGroup `
+                  --name $spokeDeployment.webAppName `
+                  --priority 400 `
+                  --service-tag AzureFrontDoor.Backend `
+                  --http-header x-azure-fdid=$($frontDoorDeployment.properties.outputs.FrontDoorId)
+
+# TODO: link ACR private DNS zone with new spoke vnet

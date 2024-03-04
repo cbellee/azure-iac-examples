@@ -1,0 +1,6 @@
+controller:
+  service:
+    loadBalancerIP: 10.0.16.4
+    annotations:
+      service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+      service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "aks-lb-subnet"

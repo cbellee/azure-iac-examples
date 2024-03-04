@@ -1,0 +1,41 @@
+# Pipeline to deploy APIM
+
+name: deployAzureResources
+
+trigger:
+- master
+
+variables:
+  # serviceConnection: # set in GUI variables
+  location: australiaeast
+  projectName: apim
+  resourceGroupName: "$(projectName)-rg"
+  tags: '{"costCentre":"478132","project":"$(projectName)"}'
+  timeStamp: $[format('{0:yyyy}-{0:MM}-{0:dd}-{0:HHmmss}', pipeline.startTime)]
+
+stages:
+- stage: 'release'
+  displayName: 'environment release'
+  jobs:
+    - job: 'dev_release_job'
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployResources'
+          displayName: 'Deploy resources'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./azuredeploy.json
+            csmParametersFile: ./azuredeploy.parameters.json
+            location: $(location)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "resourceDeployment-$(timeStamp)"
+            outputVariable: resourceTemplateOutput
+            overrideParameters: 
+
+     

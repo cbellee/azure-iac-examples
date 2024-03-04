@@ -1,0 +1,63 @@
+# app-build.yaml
+
+parameters:
+  - name: vmImage
+    default: 'ubuntu-latest'
+    type: string
+  - name: poolName
+    default: 'Azure Pipelines'
+    type: string
+  - name: resourceGroup
+    default: ''
+  - name: environment
+    default: ''
+  - name: location
+    default: ''
+  - name: azureSubscription
+    default: 'internal_azure_subscription'
+  - name: orderVersion
+    default: '0.1.0'
+  - name: productVersion
+    default: '0.1.0'
+  - name: orderImageName
+    default: 'order'
+  - name: productImageName
+    default: 'product'
+  - name: orderServicePort
+    default: '8080'
+  - name: productServicePort
+    default: '8081'
+
+stages:
+  - stage: Build
+    jobs:
+    - job: Build
+      pool: 
+        name: ${{parameters.poolName}}
+        vmImage: ${{parameters.vmImage}}
+      steps:
+        - checkout: self
+          clean: true
+          persistCredentials: true
+        - task: AzureCLI@2
+          displayName: 'build & push order container image'
+          inputs:
+            azureSubscription: azureSubscription
+            scriptType: bash
+            inlineScript: |
+              az acr build -r $(acrName) \
+              -t $(orderImageName):$(orderVersion) \
+              --build-arg SERVICE_PORT=$(orderServicePort) `
+              -f ../src/Dockerfile "../src/order"
+        - task: AzureCLI@2
+          displayName: 'build & push product container image'
+          inputs:
+            azureSubscription: azureSubscription
+            scriptType: bash
+            inlineScript: |
+              az acr build -r $(acrName) \
+              -t $(productImageName):$(productVersion) \
+              --build-arg SERVICE_PORT=$(productServicePort) `
+              -f ../src/Dockerfile "../src/product"
+
+

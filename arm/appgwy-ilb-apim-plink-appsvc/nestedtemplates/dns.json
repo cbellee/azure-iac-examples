@@ -1,0 +1,39 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"zoneName": {
+			"type": "string"
+		},
+		"cNameRecord": {
+			"type": "string"
+		},
+		"targetRecord": {
+			"type": "string"
+		}
+	},
+	"functions": [],
+	"variables": {
+		"recordName": "[concat(parameters('zoneName'), '/', parameters('cNameRecord'))]"
+	},
+	"resources": [
+		{
+			"name": "[variables('recordName')]",
+			"type": "Microsoft.Network/dnsZones/CNAME",
+			"apiVersion": "2018-05-01",
+			"properties": {
+				"metadata": {},
+				"TTL": 3600,
+				"CNAMERecord": {
+					"cname": "[parameters('targetRecord')]"
+				}
+			}
+		}
+	],
+	"outputs": {
+		"cNameFQDN": {
+			"type": "string",
+			"value": "[concat(parameters('cNameRecord'), '.', parameters('zoneName'))]"
+		}
+	}
+}

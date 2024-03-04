@@ -1,0 +1,117 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "suffix": {
+            "type": "string"
+        },
+        "firewallSubnetRef": {
+            "type": "string"
+        },
+        "apimPrivateIpAddress": {
+            "type": "string"
+        },
+        "apimGatewayHostName": {
+            "type": "string"
+        },
+        "appGatewaySubnetPrefix": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "publicIpName": "[concat('fwl-pip', '-', parameters('suffix'))]",
+        "firewallName": "[concat('fwl', '-', parameters('suffix'))]"
+    },
+    "resources": [
+        {
+            "name": "[variables('publicIPName')]",
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2017-11-01",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "properties": {
+                "publicIPAllocationMethod": "Static",
+                "publicIPAddressVersion": "IPv4"
+            }
+        },
+        {
+            "apiVersion": "2018-11-01",
+            "type": "Microsoft.Network/azureFirewalls",
+            "name": "[variables('firewallName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPName'))]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "ipconfig",
+                        "properties": {
+                            "subnet": {
+                                "id": "[parameters('firewallSubnetRef')]"
+                            },
+                            "PublicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPName'))]"
+                            }
+                        }
+                    }
+                ],
+                "applicationRuleCollections": [
+                    {
+                        "name": "appgwy-to-apim",
+                        "properties": {
+                            "priority": 1000,
+                            "action": {
+                                "type": "Allow"
+                            },
+                            "rules": [
+                                {
+                                    "name": "allow-https",
+                                    "sourceAddresses": "[array(parameters('apimPrivateIpAddress'))]", //["10.1.2.0/24"],
+                                    "protocols": [
+                                        {
+                                            "protocolType": "HTTPS",
+                                            "port": "443"
+                                        }
+                                    ],
+                                    "targetFqdns": [
+                                        "[parameters('apimGatewayHostName')]" //"api.kainiindustries.net"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "networkRuleCollections": [
+                    {
+                        "name": "appgwy-to-apim",
+                        "properties": {
+                            "priority": 1000,
+                            "action": {
+                                "type": "Allow"
+                            },
+                            "rules": [
+                                {
+                                    "name": "allow-https",
+                                    "sourceAddresses": "[array(parameters('appGatewaySubnetPrefix'))]", //["10.1.2.0/24"],
+                                    "destinationAddresses": "[array(parameters('apimPrivateIpAddress'))]", //["10.1.3.5"],
+                                    "destinationPorts": [
+                                        "443"
+                                    ],
+                                    "protocols": [
+                                        "Tcp",
+                                        "Udp"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    ],
+    "outputs": {
+    }
+}

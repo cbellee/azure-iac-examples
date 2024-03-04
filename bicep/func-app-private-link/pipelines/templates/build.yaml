@@ -1,0 +1,49 @@
+stages:
+- stage: Build
+  displayName: 'Build Go Function'
+  jobs:
+  - job: Build  
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps: 
+    - task: GoTool@0
+      inputs:
+        version: '1.18.2'
+
+    - task: Go@0
+      inputs:
+        command: 'get'
+        arguments: '-d'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/src'
+
+    - task: Go@0
+      inputs:
+        command: 'build'
+        workingDirectory: '$(System.DefaultWorkingDirectory)/src'
+
+    - task: ArchiveFiles@2
+      displayName: "Archive files"
+      inputs:
+        rootFolderOrFile: '$(System.DefaultWorkingDirectory)/src'
+        includeRootFolder: false
+        archiveFile: "$(System.DefaultWorkingDirectory)/build$(Build.BuildId).zip"
+
+    - task: CopyFiles@2
+      inputs:
+        SourceFolder: '$(System.DefaultWorkingDirectory)'
+        Contents: "build$(Build.BuildId).zip"
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        artifactName: 'function'
+
+    - task: CopyFiles@2
+      inputs:
+        SourceFolder: '$(System.DefaultWorkingDirectory)/iac'
+        Contents: 'main.bicep'
+        TargetFolder: '$(Build.ArtifactStagingDirectory)'
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        artifactName: 'bicep'

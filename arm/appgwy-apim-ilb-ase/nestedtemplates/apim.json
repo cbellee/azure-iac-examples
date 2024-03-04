@@ -1,0 +1,374 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "suffix": {
+            "type": "string"
+        },
+        "apimSku": {
+            "type": "object",
+            "defaultValue": {
+                "name": "Developer",
+                "capacity": 1
+            }
+        },
+        "portalHostName": {
+            "type": "string",
+            "defaultValue": "portal.kainiindustries.net"
+        },
+        "gatewayHostName": {
+            "type": "string",
+            "defaultValue": "api.kainiindustries.net"
+        },
+        "subnetId": {
+            "type": "string"
+        },
+        "keyVaultUri": {
+            "type": "string"
+        },
+        "keyVaultName": {
+            "type": "string"
+        }, 
+        "portalCertSecretName": {
+            "type": "string"
+        },
+        "gatewayCertSecretName": {
+            "type": "string"
+        },
+        "deployCertificates": {
+            "type": "bool",
+            "defaultValue": false
+        }
+    },
+    "variables": {
+        "apiMgmtname": "[concat('api-mgmt-', parameters('suffix'))]",
+        "apimServiceIdentityResourceId": "[concat(resourceId('Microsoft.ApiManagement/service', variables('apiMgmtname')),'/providers/Microsoft.ManagedIdentity/Identities/default')]",
+        "hostNameConfigurations": [
+            {
+                "type": "DeveloperPortal",
+                "keyVaultId": "[concat(parameters('keyVaultUri'), 'secrets/', parameters('portalCertSecretName'))]",
+                "defaultSslBinding": false,
+                "hostName": "[parameters('portalHostName')]",
+                "negotiateClientCertificate": false
+            },
+            {
+                "type": "Proxy",
+                "keyVaultId": "[concat(parameters('keyVaultUri'), 'secrets/', parameters('gatewayCertSecretName'))]",
+                "defaultSslBinding": false,
+                "hostName": "[parameters('gatewayHostName')]",
+                "negotiateClientCertificate": true
+            }
+        ]
+    },
+    "resources": [
+        {
+            "type": "Microsoft.ApiManagement/service",
+            "apiVersion": "2018-06-01-preview",
+            "name": "[variables('apiMgmtName')]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+            ],
+            "sku": "[parameters('apimSku')]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "publisherEmail": "cbellee@microsoft.com",
+                "publisherName": "KainiIndustries",
+                "notificationSenderEmail": "apimgmt-noreply@mail.windowsazure.com",
+                "hostnameConfigurations": "[if(parameters('deployCertificates'), variables('hostNameConfigurations'), json('null') )]",
+                "virtualNetworkConfiguration": {
+                    "subnetResourceId": "[parameters('subnetId')]"
+                },
+                "customProperties": {
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TripleDes168": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls10": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls11": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Ssl30": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Protocols.Server.Http2": "False"
+                },
+                "virtualNetworkType": "Internal"
+            }
+        },
+        { 
+            "type": "Microsoft.KeyVault/vaults/accessPolicies",
+            "name": "[concat(parameters('keyVaultName'), '/add')]",
+            "apiVersion": "2015-06-01",
+            "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+            ],
+            "properties": {
+                "accessPolicies": [
+                    {
+                        "tenantId": "[subscription().tenantId]",
+                        "objectId": "[reference(variables('apimServiceIdentityResourceId'), '2015-08-31-PREVIEW', 'Full').properties.principalId]",
+                        "permissions": {
+                            "secrets": [
+                                "get"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.ApiManagement/service/apis",
+            "apiVersion": "2018-06-01-preview",
+            "name": "[concat(variables('apiMgmtName'), '/external-api-1')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+            ],
+            "properties": {
+                "displayName": "External API 1",
+                "apiRevision": "1",
+                "serviceUrl": "[concat('https://', parameters('gatewayHostName'), '/external/testapi1')]",
+                "path": "external/testapi1",
+                "subscriptionRequired": false,
+                "protocols": [
+                    "https"
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.ApiManagement/service/apis",
+            "apiVersion": "2018-06-01-preview",
+            "name": "[concat(variables('apiMgmtName'), '/internal-api-1')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+            ],
+            "properties": {
+                "displayName": "Internal API 1",
+                "apiRevision": "1",
+                "serviceUrl": "[concat('https://', parameters('gatewayHostName'), '/internal/testapi1')]",
+                "path": "internal/testapi1",
+                "subscriptionRequired": false,
+                "protocols": [
+                    "https"
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.ApiManagement/service/apis/operations",
+            "apiVersion": "2018-06-01-preview",
+            "name": "[concat(variables('apiMgmtName'), '/external-api-1/external-test-call')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', variables('apiMgmtName'), 'external-api-1')]",
+                "[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+            ],
+            "properties": {
+                "displayName": "external test call",
+                "method": "GET",
+                "urlTemplate": "/test",
+                "templateParameters": [
+                ],
+                "request": {
+                    "queryParameters": [
+                        {
+                            "name": "param1",
+                            "type": "string",
+                            "values": [
+                            ]
+                        }
+                    ],
+                    "headers": [
+                    ],
+                    "representations": [
+                    ]
+                },
+                "responses": [
+                    {
+                        "statusCode": 200,
+                        "representations": [
+                            {
+                                "contentType": "application/json",
+                                "sample": "{\"apitype\":\"external\"}"
+                            }
+                        ],
+                        "headers": [
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.ApiManagement/service/apis/operations",
+            "apiVersion": "2018-06-01-preview",
+            "name": "[concat(variables('apiMgmtName'), '/internal-api-1/internal-test-call')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis', variables('apiMgmtName'), 'internal-api-1')]",
+                "[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+            ],
+            "properties": {
+                "displayName": "internal test call",
+                "method": "GET",
+                "urlTemplate": "/test",
+                "templateParameters": [
+                ],
+                "request": {
+                    "queryParameters": [
+                        {
+                            "name": "param1",
+                            "type": "string",
+                            "values": [
+                            ]
+                        }
+                    ],
+                    "headers": [
+                    ],
+                    "representations": [
+                    ]
+                },
+                "responses": [
+                    {
+                        "statusCode": 200,
+                        "representations": [
+                            {
+                                "contentType": "application/json",
+                                "sample": "{\"apitype\":\"internal\"}"
+                            }
+                        ],
+                        "headers": [
+                        ]
+                    }
+                ]
+            }
+        },
+        /* {
+            "type": "Microsoft.ApiManagement/service/products/apis",
+            "apiVersion": "2018-06-01-preview",
+            "name": "[concat(variables('apiMgmtName'), '/starter/external-api-1')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+            ],
+            "properties": {
+                "displayName": "External API 1",
+                "apiRevision": "1",
+                "description": "",
+                "serviceUrl": "[concat('https://', parameters('gatewayHostName'), '/external/testapi1')]",
+                "path": "external/testapi1",
+                "protocols": [
+                    "https"
+                ],
+                "authenticationSettings": null,
+                "subscriptionKeyParameterNames": null,
+                "isCurrent": true
+            }
+        },
+        {
+            "type": "Microsoft.ApiManagement/service/products/apis",
+            "apiVersion": "2018-06-01-preview",
+            "name": "[concat(variables('apiMgmtName'), '/unlimited/external-api-1')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+            ],
+            "properties": {
+                "displayName": "External API 1",
+                "apiRevision": "1",
+                "description": "",
+                "serviceUrl": "[concat('https://', parameters('gatewayHostName'), '/external/testapi1')]",
+                "path": "external/testapi1",
+                "protocols": [
+                    "https"
+                ],
+                "authenticationSettings": null,
+                "subscriptionKeyParameterNames": null,
+                "isCurrent": true
+            }
+        },
+        {
+            "type": "Microsoft.ApiManagement/service/products/apis",
+            "apiVersion": "2018-06-01-preview",
+            "name": "[concat(variables('apiMgmtName'), '/starter/internal-api-1')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+            ],
+            "properties": {
+                "displayName": "Internal API 1",
+                "apiRevision": "1",
+                "description": "",
+                "serviceUrl": "[concat('https://', parameters('gatewayHostName'), '/internal/testapi1')]",
+                "path": "internal/testapi1",
+                "protocols": [
+                    "https"
+                ],
+                "authenticationSettings": null,
+                "subscriptionKeyParameterNames": null,
+                "isCurrent": true
+            }
+        },
+        {
+            "type": "Microsoft.ApiManagement/service/products/apis",
+            "apiVersion": "2018-06-01-preview",
+            "name": "[concat(variables('apiMgmtName'), '/unlimited/internal-api-1')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+            ],
+            "properties": {
+                "displayName": "Internal API 1",
+                "apiRevision": "1",
+                "description": "",
+                "serviceUrl": "[concat('https://', parameters('gatewayHostName'), '/internal/testapi1')]",
+                "path": "internal/testapi1",
+                "protocols": [
+                    "https"
+                ],
+                "authenticationSettings": null,
+                "subscriptionKeyParameterNames": null,
+                "isCurrent": true
+            }
+        }, */
+        {
+            "type": "Microsoft.ApiManagement/service/apis/operations/policies",
+            "apiVersion": "2018-06-01-preview",
+            "name": "[concat(variables('apiMgmtName'), '/external-api-1/external-test-call/policy')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis/operations', variables('apiMgmtName'), 'external-api-1', 'external-test-call')]",
+                "[resourceId('Microsoft.ApiManagement/service/apis', variables('apiMgmtName'), 'external-api-1')]",
+                "[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+            ],
+            "properties": {
+                "policyContent": "<policies>\r\n  <inbound>\r\n    <base />\r\n    <mock-response status-code=\"200\" content-type=\"application/json\" />\r\n  </inbound>\r\n  <backend>\r\n    <base />\r\n  </backend>\r\n  <outbound>\r\n    <base />\r\n  </outbound>\r\n  <on-error>\r\n    <base />\r\n  </on-error>\r\n</policies>",
+                "contentFormat": "xml"
+            }
+        },
+        {
+            "type": "Microsoft.ApiManagement/service/apis/operations/policies",
+            "apiVersion": "2018-06-01-preview",
+            "name": "[concat(variables('apiMgmtName'), '/internal-api-1/internal-test-call/policy')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service/apis/operations', variables('apiMgmtName'), 'internal-api-1', 'internal-test-call')]",
+                "[resourceId('Microsoft.ApiManagement/service/apis', variables('apiMgmtName'), 'internal-api-1')]",
+                "[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+            ],
+            "properties": {
+                "policyContent": "<policies>\r\n  <inbound>\r\n    <base />\r\n    <mock-response status-code=\"200\" content-type=\"application/json\" />\r\n  </inbound>\r\n  <backend>\r\n    <base />\r\n  </backend>\r\n  <outbound>\r\n    <base />\r\n  </outbound>\r\n  <on-error>\r\n    <base />\r\n  </on-error>\r\n</policies>",
+                "contentFormat": "xml"
+            }
+        }
+    ],
+    "outputs": {
+        "apimPrivateIpAddress": {
+            "type": "string",
+            "value": "[reference(variables('apiMgmtName')).privateIPAddresses[0]]"
+        },
+        "apimGatewayHostName": {
+            "type": "string",
+            "value": "[replace(reference(variables('apiMgmtName')).gatewayUrl, 'https://', '')]"
+        },
+        "apimPortalHostName": {
+            "type": "string",
+            "value": "[replace(reference(variables('apiMgmtName')).portalUrl, 'https://', '')]"
+        },
+        "apimScmDnsName": {
+            "type": "string",
+            "value": "[replace(reference(variables('apiMgmtName')).scmUrl, 'https://', '')]"
+        },
+        "apimMgmtDnsName": {
+            "type": "string",
+            "value": "[replace(reference(variables('apiMgmtName')).managementApiUrl, 'https://', '')]"
+        }
+    }
+}

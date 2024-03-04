@@ -1,0 +1,19 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: crossplane
+  namespace: flux-system
+spec:
+  releaseName: crossplane
+  chart:
+    spec:
+      chart: crossplane
+      reconcileStrategy: ChartVersion
+      sourceRef:
+        kind: HelmRepository
+        name: crossplane
+        namespace: flux-system
+  install:
+    createNamespace: true
+  interval: 1m0s
+  targetNamespace: flux-system

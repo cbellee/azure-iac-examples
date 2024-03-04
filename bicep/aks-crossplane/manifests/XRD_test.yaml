@@ -1,0 +1,30 @@
+---
+apiVersion: apiextensions.crossplane.io/v1  # We're using the Crossplane machinery
+kind: CompositeResourceDefinition           # We're creating an XRD
+metadata:
+  name: xnetworks.cbellee.azure.crossplane.io # We're combining the plural name with group
+spec:
+  group: cbellee.azure.crossplane.io  # We're making up any api path we like
+  names:
+    kind: XNetwork      # We're making up any name we choose, and prefacing with 'X' to denote Composite Resource
+    plural: xnetworks   # We're providing the plural version of the kind, naming practices dictate it is lowercase
+  claimNames:
+    kind: Network
+    plural: networks
+  versions:            #
+  - name: v1alpha1    # We're defining am API version, will be used with Composition versioning in a similar way to Deployment Replicaset versions
+    served: true
+    referenceable: true
+    schema:          # Begin schema definition
+      openAPIV3Schema: # Lines 13 - 19 are essentially boilerplate for this section
+      type: object
+      properties:
+        spec:          # Begin spec block definition
+          type: object
+          properties:
+            id:        # Begin spec.id field - This is the field we decided we want creators of this thing to be able to specify. This could be called anything and we can add as many fields as we like
+              type: string
+              description: ID of this Network that other objects will use to refer to it.
+            location:
+              type: string
+              description: Azure region/location

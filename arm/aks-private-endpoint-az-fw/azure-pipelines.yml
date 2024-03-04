@@ -1,0 +1,108 @@
+# specific path build
+trigger:
+  branches:
+    include:
+    - master
+    - develop
+  paths:
+    include:
+    - arm/aks-private-endpoint-az-fw/*
+    exclude:
+    - arm/aks-private-endpoint-az-fw/azure-pipelines.yml
+variables:
+  # ADO_SERVICE_CONNECTION_NAME: # set in variable group
+  # LOCATION: # set in variable group
+  # DB_ADMIN_PASSWORD: # set in variable group
+  - group: aks_arm_vars
+  - name: projectName
+    value: aks-private-endpoint-az-fw
+  - name: resourceGroupName
+    value: "$(projectName)-rg"
+  - name: timeStamp
+    value: $[format('{2:yyyy}-{2:MM}-{2:dd}-{2:HHmmss}', 'network', 'deployment', pipeline.startTime)]
+  - name: tags
+    value: '{"costCentre":"478132","project":"$(projectName)"}'
+  - name: containerName
+    value: nestedtemplates
+  - name: folderPath
+    value: aks-private-endpoint-az-fw
+  - name: AKS_MAX_POD_COUNT
+    value: 50
+
+stages:
+- stage: 'release'
+  displayName: 'environment release'
+  jobs:
+    - job: 'dev_release_job'
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: PowerShell@2
+          displayName: 'Create Sas Token expiry date/time'
+          inputs:
+            targetType: 'inline'
+            script: |
+              $now = Get-Date
+              $sasTokenExpiry = $now.AddHours(2).ToString('u') -replace ' ','T'
+              Write-Host "##vso[task.setvariable variable=sasTokenExpiry;]$sasTokenExpiry"
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployStorage'
+          displayName: 'Deploy storage account for ARM templates'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./arm/$(folderPath)/nestedtemplates/storage.json
+            location: $(LOCATION)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "storageDeployment-$(timeStamp)"
+            outputVariable: storageTemplateOutput
+            deploymentOutputs: storageDeploymentOutput
+            overrideParameters: 
+              -containerName $(containerName) 
+              -sasTokenExpiry $(sasTokenExpiry)
+
+        - task: PowerShell@2
+          displayName: 'Get Storage Deployment Outputs'
+          inputs:
+            targetType: 'inline'
+            script: |
+              $outputs = '$(storageDeploymentOutput)' | ConvertFrom-Json
+              foreach ($output in $outputs.PSObject.Properties) {
+                Write-Host "$($output.Name) - $($output.Value.value)"
+                Write-Host "##vso[task.setvariable variable=$($output.Name);]$($output.Value.value)" 
+              }
+
+        - task: AzureCLI@1
+          displayName: 'Copy ARM template files to Azure blob storage'
+          enabled: true
+          inputs:
+            azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+            scriptLocation: 'inlineScript'
+            inlineScript: 'az storage blob upload-batch -d $(containerName) -s ./arm/$(folderPath)/nestedtemplates/ --pattern *.json --account-name $(storageAccountName)'
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployResources'
+          displayName: 'Deploy resources'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./arm/$(folderPath)/azuredeploy.json
+            csmParametersFile: ./arm/$(folderPath)/azuredeploy.parameters.json
+            location: $(LOCATION)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "resourceDeployment-$(timeStamp)"
+            outputVariable: resourceTemplateOutput
+            overrideParameters: 
+              -artifactsLocation $(storageContainerUri)
+              -artifactsLocationSasToken "$(storageAccountSasToken)"
+              -sshPublicKey "$(SSH_KEY)"
+              -dbAdminPassword $(DB_ADMIN_PASSWORD)
+              -aksMaxPodCount $(AKS_MAX_POD_COUNT)
+              -aadAdminGroupObjectIds ["$(AAD_ADMIN_GROUP_ID)"]

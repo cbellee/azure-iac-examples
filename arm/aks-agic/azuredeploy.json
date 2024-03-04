@@ -1,0 +1,234 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentMode": {
+            "type": "string",
+            "allowedValues": [
+                "Incremental",
+                "Complete"
+            ],
+            "defaultValue": "Incremental"
+        },
+        "storageUri": {
+            "type": "string"
+        },
+        "tags": {
+            "type": "object"
+        },
+        "vNets": {
+            "type": "array"
+        },
+        "sasToken": {
+            "type": "string"
+        },
+        "aksVersion": {
+            "type": "string"
+        },
+        "aksNodeCount": {
+            "type": "int",
+            "defaultValue": 3
+        },
+        "aksNodeVMSize": {
+            "type": "string",
+            "defaultValue": "Standard_F2s_v2"
+        },
+        "maxPods": {
+            "type": "int",
+            "defaultValue": 50
+        },
+        "aksServicePrincipalAppId": {
+            "type": "string"
+        },
+        "aksServicePrincipalSecret": {
+            "type": "string"
+        },
+        "aksServicePrincipalObjectId": {
+            "type": "string"
+        },
+        "applicationGatewaySku": {
+            "type": "string",
+            "defaultValue": "WAF_v2"
+        }
+    },
+    "variables": {
+        "resgpguid": "[substring(uniqueString(subscription().id, resourceGroup().id), 0, 6)]"
+    },
+    "resources": [
+        {
+            "name": "[concat('linkedTemplate-vnet', '-', copyIndex())]",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "comments": "This deployment links to the gatewayVpn nested ARM template",
+            "dependsOn": [
+            ],
+            "condition": true,
+            "resourceGroup": "[resourceGroup().name]",
+            "copy": {
+                "name": "vnetCopy",
+                "count": "[length(parameters('vNets'))]"
+            },
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    },
+                    "vNet": {
+                        "value": "[parameters('vNets')[copyIndex()]]"
+                    },
+                    "tags": {
+                        "value": "[parameters('tags')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'vnets.json', parameters('sasToken'))]"
+                }
+            }
+        },
+                {
+            "name": "linkedTemplate-acr",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "comments": "This deployment links to the azure container registry nested ARM template",
+            "dependsOn": [
+            ],
+            "condition": true,
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "tags": {
+                        "value": "[parameters('tags')]"
+                    },
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'acr.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "name": "linkedTemplate-appgwy",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "comments": "This deployment links to the application gateway nested ARM template",
+            "dependsOn": [
+            ],
+            "condition": true,
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "applicationGatewaySku": {
+                        "value": "[parameters('applicationGatewaySku')]"
+                    },
+                    "applicationGatewaySubnetId": {
+                        "value": "[reference(resourceId('Microsoft.Resources/deployments', 'linkedTemplate-vnet-0')).outputs.subnetRefs.value[1].id]"
+                    },
+                    "tags": {
+                        "value": "[parameters('tags')]"
+                    },
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'appgwy.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "linkedTemplate-aks",
+            "dependsOn": [
+                "vnetCopy"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'aks.json', parameters('sasToken'))]"
+                },
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    },
+                    "aksVersion": {
+                        "value": "[parameters('aksVersion')]"
+                    },
+                    "aksNodeCount": {
+                        "value": "[parameters('aksNodeCount')]"
+                    },
+                    "maxPods": {
+                        "value": "[parameters('maxPods')]"
+                    },
+                    "aksSubnetId": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[0].id]"
+                    },
+                    "aksVnetName": {
+                        "value": "[concat(parameters('vNets')[0].name, '-', variables('resgpguid'))]"
+                    },
+                    "aksNodeVMSize": {
+                        "value": "[parameters('aksNodeVMSize')]"
+                    },
+                    "aksSubnetName": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[0].name]"
+                    },
+                    "applicationGatewayName": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-appgwy').outputs.applicationGatewayName.value]"
+                    },
+                    "applicationGatewayId": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-appgwy').outputs.applicationGatewayId.value]"
+                    },
+                    "aksMinNodeCount": {
+                        "value": 1
+                    },
+                    "aksMaxNodeCount": {
+                        "value": 10
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "aksControlPlaneFQDN": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-aks').outputs.aksControlPlaneFQDN.value]"
+        },
+        "subscriptionId": {
+            "type": "string",
+            "value": "[subscription().subscriptionId]"
+        },
+        "applicationGatewayIdentityResourceId": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-aks').outputs.applicationGatewayIdentityResourceId.value]"
+        },
+        "applicationGatewayIdentityClientId": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-aks').outputs.applicationGatewayIdentityClientId.value]"
+        },
+        "applicationGatewayName": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-appgwy').outputs.applicationGatewayName.value]"
+        },
+        "applicationGatewayPublicIpResourceId": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-appgwy').outputs.applicationGatewayPublicIpResourceId.value]"
+        },
+        "aksApiServerUri": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-aks').outputs.aksApiServerUri.value]"
+        },
+        "aksClusterName": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-aks').outputs.aksClusterName.value]"
+        }
+    }
+}

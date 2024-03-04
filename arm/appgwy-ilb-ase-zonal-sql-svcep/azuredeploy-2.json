@@ -1,0 +1,113 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"storageUri": {
+			"type": "string",
+			"defaultValue": null
+		},
+		"sasToken": {
+			"type": "string",
+			"defaultValue": null
+		},
+		"appGwyApplications": {
+			"type": "object"
+		},
+		"keyVaultName": {
+			"type": "string"
+		},
+		"subnetId": {
+			"type": "string"
+		},
+		"certificateId": {
+			"type": "string"
+		}
+	},
+	"variables": {
+		"suffix": "[substring(uniqueString(resourceGroup().id, subscription().subscriptionId, resourceGroup().location), 0, 6)]"
+	},
+	"resources": [
+		{
+			"type": "Microsoft.Resources/deployments",
+			"apiVersion": "2018-05-01",
+			"name": "linkedTemplate-appgwy",
+			"dependsOn": [
+			],
+			"properties": {
+				"mode": "Incremental",
+				"templateLink": {
+					"contentVersion": "1.0.0.0",
+					"uri": "[concat(parameters('storageUri'), '/', 'appgwy.json', parameters('sasToken'))]"
+				},
+				"parameters": {
+					"suffix": {
+						"value": "[variables('suffix')]"
+					},
+					"location": {
+						"value": "[resourceGroup().location]"
+					},
+					"keyVaultName": {
+						"value": "[parameters('keyVaultName')]"
+					},
+					"appGwyApplications": {
+						"value": "[parameters('appGwyApplications')]"
+					},
+					"subnetId": {
+						"value": "[parameters('subnetId')]"
+					},
+					"appGwyZones": {
+						"value": "1,2,3"
+					},
+					"certificateId": {
+						"value": "[parameters('certificateId')]"
+					}
+				}
+			}
+		},
+		{
+			"type": "Microsoft.Resources/deployments",
+			"apiVersion": "2018-05-01",
+			"name": "linkedTemplate-private-dns",
+			"dependsOn": [
+			],
+			"properties": {
+				"mode": "Incremental",
+				"templateLink": {
+					"contentVersion": "1.0.0.0",
+					"uri": "[concat(parameters('storageUri'), '/', 'privatedns.json', parameters('sasToken'))]"
+				},
+				"parameters": {
+					"aseApplications": {
+						"value": "[parameters('appGwyApplications')]"
+					}
+				}
+			}
+		},
+		{
+			"type": "Microsoft.Resources/deployments",
+			"apiVersion": "2018-05-01",
+			"name": "linkedTemplate-update-nsg",
+			"dependsOn": [
+				"linkedTemplate-appgwy"
+			],
+			"properties": {
+				"mode": "Incremental",
+				"templateLink": {
+					"contentVersion": "1.0.0.0",
+					"uri": "[concat(parameters('storageUri'), '/', 'nsg.json', parameters('sasToken'))]"
+				},
+				"parameters": {
+					"suffix": {
+						"value": "[variables('suffix')]"
+					}
+				}
+			}
+		}
+	],
+	"outputs": {
+		"appGatewayPublicIpAddressId": {
+			"type": "string",
+			"value": "[reference('Microsoft.Resources/deployments/linkedTemplate-appgwy').outputs.appGatewayPublicIpAddressId.value]"
+		}
+	}
+}

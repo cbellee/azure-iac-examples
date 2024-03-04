@@ -1,0 +1,12 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: https-route
+  namespace: backend-mtls
+spec:
+  parentRefs:
+  - name: gateway-01
+  rules:
+  - backendRefs:
+    - name: mtls-app
+      port: 443

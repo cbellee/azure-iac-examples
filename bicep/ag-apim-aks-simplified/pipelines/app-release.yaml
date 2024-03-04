@@ -1,0 +1,80 @@
+parameters:
+  - name: 'vmImage'
+    default: 'ubuntu-latest'
+    type: string
+  - name: 'poolName'
+    default: 'Azure Pipelines'
+  - name: 'location'
+    default: 'australiaeast'
+    type: string
+  - name: 'azureConnection'
+    default: 'internal_azure_subscription'
+    type: string
+  - name: aadTenant
+    default: 'kainiindustries.net'
+    type: string
+  - name: 'resourceGroupName'
+    default: 'ag-apim-aks-rg'
+    type: string
+  - name: 'publicDnsZone'
+    default: 'kainiindustries.net'
+    type: string
+
+
+stages:
+- stage: dev
+  jobs:
+  - deployment: 
+    displayName: 'dev_application_deployment'
+    pool:
+      name: ${{parameters.poolName}}
+    environment: ag-apim-aks-dev
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - task: AzurePowerShell@5
+              displayName: 'create AAD Application registration'
+              inputs:
+                azureSubscription: azureSubscription
+                pwsh: true
+                ScriptPath: ../scripts/create_app_reg.ps1
+                ScriptType: FilePath
+                ScriptArguments: |
+                  -AADTenant $(aadTenant) `
+                  -PublicDnsZone $(publicDnsZone) `
+                  -Prefix 'dev' `
+                  -ApiName 'order'
+            - task: AzurePowerShell@5
+              displayName: 'create API policy file'
+              inputs:
+                azureSubscription: azureSubscription
+                pwsh: true
+                ScriptPath: ../scripts/create_api_policy.ps1
+                ScriptType: FilePath
+                ScriptArguments: |
+                  -AADTenant $(aadTenant) `
+                  -PublicDnsZone $(publicDnsZone) `
+                  -ApiSvcIp $(apiSvcIp) `
+                  -ApiReadRoleName $(appReadRoleName) `
+                  -ApiWriteRoleName $(appWriteRoleName) `
+                  -ApplicationRegistrationId $(appRegistrationId)
+            - task: AzurePowerShell@5
+              displayName: deploy order API'
+              inputs:
+                azureSubscription: azureSubscription
+                pwsh: true
+                ScriptPath: ../scripts/deploy_api.ps1
+                ScriptType: FilePath
+                ScriptArguments: |
+                  -AADTenant 'kainiindustries.net' `
+                  -PublicDnsZone 'kainiindustries.net' `
+                  -Prefix 'dev' `
+                  -ApiName = 'order' `
+                  -ApiSvcIp = '1.1.1.1' `
+                  -Environment = 'dev' `
+                  -Semver = '0.1.0' `
+                  -ApiPort = "8080" `
+                  -ResourceGroupName ${{parameters.resourceGroupName}}-dev-${{parameters.location}}-rg `
+                  -DeploymentName = "$Environment-infra-deployment"
+                    

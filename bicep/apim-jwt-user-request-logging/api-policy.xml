@@ -1,0 +1,36 @@
+<policies>
+    <inbound>
+        <base />
+        <validate-jwt header-name="authorization" failed-validation-httpcode="401" failed-validation-error-message="sorry, validation has failed!" output-token-variable-name="jwt-token">
+            <openid-config url="https://login.microsoftonline.com/3d49be6f-6e38-404b-bbd4-f61c1a2d25bf/v2.0/.well-known/openid-configuration" />
+            <issuers>
+                <issuer>https://sts.windows.net/3d49be6f-6e38-404b-bbd4-f61c1a2d25bf/</issuer>
+            </issuers>
+        </validate-jwt>
+        <set-variable name="clientID" value="@(context.Request.Headers.GetValueOrDefault("Authorization").AsJwt()?.Claims.GetValueOrDefault("oid"))" />
+        <set-variable name="clientName" value="@(context.Request.Headers.GetValueOrDefault("Authorization").AsJwt()?.Claims.GetValueOrDefault("name"))" />
+        <set-variable name="clientUPN" value="@(context.Request.Headers.GetValueOrDefault("Authorization").AsJwt()?.Claims.GetValueOrDefault("unique_name"))" />
+        <trace source="test-source" severity="information">
+            <message>clientID</message>
+            <metadata name="clientID" value="@(context.Variables.GetValueOrDefault<string>("clientID","null"))" />
+        </trace>
+        <trace source="test-source" severity="information">
+            <message>clientName</message>
+            <metadata name="clientName" value="@(context.Variables.GetValueOrDefault<string>("clientName","null"))" />
+        </trace>
+        <trace source="test-source" severity="information">
+            <message>clientUPN</message>
+            <metadata name="clientUPN" value="@(context.Variables.GetValueOrDefault<string>("clientUPN","null"))" />
+        </trace>
+        <mock-response status-code="200" content-type="application/json" />
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

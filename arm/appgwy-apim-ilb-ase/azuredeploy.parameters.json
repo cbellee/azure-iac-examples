@@ -1,0 +1,120 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vNets": {
+            "value": [
+                {
+                    "name": "hub-vnet",
+                    "addressPrefixes": [
+                        "10.1.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "AppGwySubnet",
+                            "addressPrefix": "10.1.2.0/24",
+                            "udrName": "appgwy",
+                            "nsgName": "app-gwy-subnet",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "ApiMgmtSubnet",
+                            "addressPrefix": "10.1.3.0/24",
+                            "udrName": "apim",
+                            "nsgName": "apim-subnet",
+                            "serviceEndpoints": [
+                                {
+                                    "service": "Microsoft.Web",
+                                    "locations": [
+                                        "*"
+                                    ]
+                                }
+                            ],
+                            "delegations": null
+                        },
+                        {
+                            "name": "InfraSubnet",
+                            "addressPrefix": "10.1.4.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "AzureFirewallSubnet",
+                            "addressPrefix": "10.1.5.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        }
+                    ]
+                },
+                {
+                    "name": "spoke-vnet",
+                    "addressPrefixes": [
+                        "10.2.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "AppSubnet",
+                            "addressPrefix": "10.2.1.0/24",
+                            "udrName": "spoke-to-hub",
+                            "nsgName": "ase-ilb-subnet",
+                            "serviceEndpoints": null,
+                            "delegations": [
+                                {
+                                    "name": "delegation",
+                                    "properties": {
+                                        "serviceName": "Microsoft.Web/serverfarms",
+                                        "actions": [
+                                            "Microsoft.Network/virtualNetworks/subnets/action"
+                                        ]
+                                    },
+                                    "type": "Microsoft.Network/virtualNetworks/subnets/delegations"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        "deploymentMode": {
+            "value": "Incremental"
+        },
+        "storageUri": {
+            "value": null
+        },
+        "sasToken": {
+            "value": null
+        },
+        "tags": {
+            "value": {
+                "costCenter": "123456789",
+                "dept": "it"
+            }
+        },
+        "keyVaultId": {
+            "value": null
+        },
+        "keyVaultName": {
+            "value": null
+        },
+        "apimGatewayHostName": {
+            "value": "api"
+        },
+        "apimPortalHostName": {
+            "value": "portal"
+        },
+        "sslPfxSecretName": {
+            "value": "kainiindustriespfx"
+        },
+        "functionBody": {
+            "value": null
+        },
+        "isDeployASE": {
+            "value": false
+        }
+    }
+}

@@ -1,0 +1,47 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "acrName": {
+            "type": "string",
+            "defaultValue": "acr"
+        }
+    },
+    "variables": {
+        "resgpguid": "[substring(replace(guid(resourceGroup().id), '-', ''), 0, 6)]",
+        "acrName": "[concat(parameters('acrName'), variables('resgpguid'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.ContainerRegistry/registries",
+            "apiVersion": "2017-10-01",
+            "name": "[variables('acrName')]",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "properties": {
+                "adminUserEnabled": true
+            }
+        }
+    ],
+    "outputs": {
+        "registryName": {
+            "type": "string",
+            "value": "[variables('acrName')]"
+        },
+        "registryServer": {
+            "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))).loginServer]",
+            "type": "string"
+        },
+        "registryPassword": {
+            "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')),'2017-03-01').passwords[0].value]",
+            "type": "string"
+        },
+        "registryResourceId": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]"
+        }
+    }
+}
+

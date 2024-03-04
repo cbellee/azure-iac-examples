@@ -1,0 +1,19 @@
+displayName: Get_aca-todolist-demo.braveground-c7fa82d3.westeur
+testPlan: quick_test.jmx
+description: 
+engineInstances: 1
+testId: c2b991f9-cbcf-4869-a8e9-ed84cee2acf9
+splitAllCSVs: False
+env:
+- name: domain
+  value: aca-todolist-demo.braveground-c7fa82d3.westeurope.azurecontainerapps.io
+- name: protocol
+  value: https
+- name: threads_per_engine
+  value: 5
+- name: ramp_up_time
+  value: 60
+- name: duration_in_sec
+  value: 300
+- name: path
+  value: api/todos

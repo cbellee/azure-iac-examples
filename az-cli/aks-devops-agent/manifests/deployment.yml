@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vsts-agent-deployment
+  labels:
+    app: vsts-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vsts-agent
+  template:
+    metadata:
+      labels:
+        app: vsts-agent
+    spec:
+      containers:
+      - name: vsts-agent
+        image: mcr.microsoft.com/azure-pipelines/vsts-agent:latest
+        env:
+          - name: VSTS_ACCOUNT
+            valueFrom:
+              secretKeyRef:
+                name: vsts
+                key: VSTS_ACCOUNT
+          - name: VSTS_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: vsts
+                key: VSTS_TOKEN
+          - name: VSTS_POOL
+            value: dockerized-vsts-agents
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /var/run/docker.sock
+          name: docker-volume
+      volumes:
+      - name: docker-volume
+        hostPath:
+          path: /var/run/docker.sock

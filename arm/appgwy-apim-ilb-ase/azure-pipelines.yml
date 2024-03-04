@@ -1,0 +1,212 @@
+# Pipeline to deploy Network, App Gateway -> APIM -> ILB ASE
+
+name: deployAzureResources
+
+trigger:
+- master
+
+variables:
+  # serviceConnection: # set in GUI variables
+  location: australiaeast
+  projectName: appgwy-apim-ilb-ase
+  resourceGroupName: "$(projectName)-rg"
+  dnsResourceGroupName: "external-dns-zones-rg"
+  timeStamp: $[format('{2:yyyy}-{2:MM}-{2:dd}-{2:HHmmss}', 'network', 'deployment', pipeline.startTime)]
+  tags: '{"costCentre":"478132","project":"$(projectName)"}'
+  containerName: 'templates'
+  domainName: kainiindustries.net
+  apimPortalHostName: portal.$(domainName)
+  apimGatewayHostName: api.$(domainName)
+  keyVaultUserObjectId: 1eb6f33c-ed0a-4d01-8025-593b5d117f12
+  sslSecretName: kainiindustriespfx
+
+stages:
+- stage: 'release'
+  displayName: 'environment release'
+  jobs:
+    - job: 'dev_release_job'
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: PowerShell@2
+          inputs:
+            targetType: 'inline'
+            script: |
+              $now = Get-Date
+              $sasTokenExpiry = $now.AddHours(2).ToString('u') -replace ' ','T'
+              Write-Host "##vso[task.setvariable variable=sasTokenExpiry;]$sasTokenExpiry"
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployStorage'
+          displayName: 'Deploy storage account for arm templates'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./nestedtemplates/storage.json
+            location: $(location)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "storageDeployment-$(timeStamp)"
+            deploymentOutputs: storageDeploymentOutput
+            outputVariable: storageTemplateOutput
+            overrideParameters: -containerName $(containerName) -sasTokenExpiry $(sasTokenExpiry)
+
+        - task: PowerShell@2
+          displayName: 'Get Storage Deployment Outputs'
+          inputs:
+            targetType: 'inline'
+            script: |
+                $outputs = '$(storageDeploymentOutput)' | ConvertFrom-Json
+                foreach ($output in $outputs.PSObject.Properties) {
+                  Write-Host "$($output.Name) - $($output.Value.value)"
+                  Write-Host "##vso[task.setvariable variable=$($output.Name);]$($output.Value.value)" 
+                }
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployKeyVault'
+          displayName: 'Deploy keyvault'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./nestedtemplates/keyvault.json
+            location: $(location)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "keyVaultDeployment-$(timeStamp)"
+            overrideParameters: -keyVaultUserObjectId $(keyVaultUserObjectId)
+
+        - task: ARM Outputs@5
+          name: 'GetKeyVaultDeploymentOutput'
+          displayName: 'Get KeyVault Deployment Output'
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            whenLastDeploymentIsFailed: 'fail'
+            deploymentNameFilter: "keyVaultDeployment-$(timeStamp)"
+
+        - task: AzurePowerShell@4
+          displayName: 'Upload certificates to key vault'
+          enabled: false
+          inputs:
+            azureSubscription: $(serviceConnection)
+            ScriptType: FilePath
+            ScriptPath: './scripts/upload-KeyVaultSecrets.ps1'
+            ScriptArguments: -CertPassword $(certPassword) -KeyVaultName $(keyVaultName)
+            azurePowerShellVersion: LatestVersion
+
+        - task: ARM Outputs@5
+          name: 'GetKeyvaultDeploymentOutput1'
+          displayName: 'Get ARM Storage Deployment Output'
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            whenLastDeploymentIsFailed: 'fail'
+            deploymentNameFilter: "keyvaultDeployment-$(timeStamp)"
+       
+        - task: AzureCLI@1
+          displayName: 'Copy ARM template files to Azure blob storage'
+          enabled: true
+          inputs:
+            azureSubscription: $(serviceConnection)
+            scriptLocation: 'inlineScript'
+            inlineScript: 'az storage blob upload-batch -d $(containerName) -s ./nestedtemplates/ --pattern *.json --account-name $(storageAccountName)'
+
+        - task: AzurePowerShell@4
+          name: 'copyFilesToBlobStorage'
+          enabled: false
+          displayName: 'Copy ARM templates to blob storage'
+          inputs:
+            Inline: 
+            ScriptPath: ./scripts/azureFileCopy.ps1
+            ScriptType: FilePath
+            azureSubscription: $(serviceConnection)
+            azurePowerShellVersion: LatestVersion
+            ScriptArguments: 
+              -resourceGroupName $(resourceGroupName) 
+              -storageAccountName $(storageAccountName) 
+              -containerName $(containerName) 
+              -folderpath ./templates/nested 
+              -filter *.json    
+        
+        - task: PowerShell@2
+          name: 'getfunctionbody'
+          enabled: true
+          displayName: 'Get Azure Function Body from Script file'
+          inputs:
+            targetType: inline
+            pwsh: true
+            script: |
+              $body = [System.IO.File]::ReadAllText('./scripts/function.ps1')
+              $bytes = [System.Text.Encoding]::ASCII.GetBytes($body)
+              $encodedText = [Convert]::ToBase64String($bytes)
+              Write-Host "encodedText: `n $encodedText"
+              Write-Host "##vso[task.setvariable variable=functionBody;]$encodedText"
+  
+        - task: PowerShell@2
+          name: 'getenvvars'
+          enabled: true
+          displayName: 'Get Env Vars'
+          inputs:
+            targetType: inline
+            pwsh: true
+            script: |
+              dir env:\
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployResources'
+          displayName: 'Deploy resources'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./azuredeploy.json
+            csmParametersFile: ./azuredeploy.parameters.json
+            location: $(location)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "resourceDeployment-$(timeStamp)"
+            outputVariable: resourceTemplateOutput
+            overrideParameters: 
+              -storageUri $(storageContainerUri) 
+              -keyVaultName $(keyVaultName) 
+              -keyVaultUri $(keyVaultUri) 
+              -keyVaultId $(keyVaultId) 
+              -sasToken $(storageAccountSasToken) 
+              -apimGatewayHostName $(apimGatewayHostName)
+              -apimPortalHostName $(apimPortalHostName)
+              -sslPfxSecretName $(sslSecretName)
+              -functionBody "$(functionBody)"
+              -isDeployASE false
+
+        - task: ARM Outputs@5
+          name: 'GetResourceDeploymentOutput1'
+          displayName: 'Get ARM Resource Deployment Output'
+          enabled: true
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(serviceConnection)
+            resourceGroupName: $(resourceGroupName)
+            whenLastDeploymentIsFailed: 'fail'
+            deploymentNameFilter: "resourceDeployment-$(timeStamp)"
+
+        - task: AzurePowerShell@4
+          name: 'createDnsRecord'
+          enabled: true
+          displayName: 'Create new DNS Record for App Gateway'
+          inputs:
+            Inline: 
+            ScriptPath: ./scripts/New-DnsRecord.ps1
+            ScriptType: FilePath
+            azureSubscription: $(serviceConnection)
+            azurePowerShellVersion: LatestVersion
+            ScriptArguments: 
+              -ResourceGroupName $(dnsResourceGroupName) 
+              -ZoneName $(domainName) 
+              -TargetName $(appGatewayPublicDnsName)       

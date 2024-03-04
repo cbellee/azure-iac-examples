@@ -1,0 +1,28 @@
+{
+  "Name": "Marketing Custom APIM Role",
+  "Id": "edb53b10-5f70-4f4f-bbf3-cdd9fee56c4e",
+  "IsCustom": false,
+  "Description": "Read-only access to service and APIs",
+  "Actions": [
+    "Microsoft.ApiManagement/service/*/read",
+    "Microsoft.ApiManagement/service/read",
+    "Microsoft.Authorization/*/read",
+    "Microsoft.Insights/alertRules/*",
+    "Microsoft.ResourceHealth/availabilityStatuses/read",
+    "Microsoft.Resources/subscriptions/resourceGroups/read",
+    "Microsoft.Support/*"
+  ],
+  "NotActions": [
+    "Microsoft.ApiManagement/service/users/keys/read",
+    "Microsoft.ApiManagement/service/users/keys/read",
+    "Microsoft.ApiManagement/service/delete",
+    "Microsoft.ApiManagement/service/write",
+    "Microsoft.ApiManagement/service/products/delete",
+    "Microsoft.Resources/deployments/*"
+  ],
+  "DataActions": [],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/dev-appgwy-apim-aks-rg/providers/Microsoft.ApiManagement/service/api-mgmt-25go45oxoiwxo/products/marketing"
+  ]
+}

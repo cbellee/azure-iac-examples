@@ -1,0 +1,73 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentMode": {
+            "value": "Incremental"
+        },
+        "storageUri": {
+            "value": null
+        },
+        "sasToken": {
+            "value": null
+        },
+        "tags": {
+            "value": {
+                "costCenter": "123456789",
+                "dept": "it"
+            }
+        },
+        "appName": {
+            "value": null
+        },
+        "dnsZoneName": {
+            "value": null
+        },
+        "userAssignedIdentityResourceId": {
+            "value": null
+        },
+        "vNets": {
+            "value": [
+                {
+                    "name": "hub-vnet",
+                    "addressPrefixes": [
+                        "10.10.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "GatewaySubnet",
+                            "addressPrefix": "10.10.1.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "serviceEndpoints": []
+                        },
+                        {
+                            "name": "ApplicationGatewaySubnet",
+                            "addressPrefix": "10.10.2.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "serviceEndpoints": [
+                                {
+                                    "service": "Microsoft.Sql"
+                                },
+                                {
+                                    "service": "Microsoft.Storage"
+                                },
+                                {
+                                    "service": "Microsoft.EventHub"
+                                }
+                            ]
+                        },
+                        {
+                            "name": "shared-services-subnet",
+                            "addressPrefix": "10.10.3.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "serviceEndpoints": []
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}

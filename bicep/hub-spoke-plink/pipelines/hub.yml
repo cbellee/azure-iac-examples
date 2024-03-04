@@ -1,0 +1,82 @@
+### hub.yml ###
+trigger:
+  branches:
+    include:
+      - main
+      - master
+  paths:
+    include:
+      - bicep/hub-spoke-plink
+    exclude:
+      - bicep/hub-spoke-plink/pipelines
+      - bicep/hub-spoke-plink/modules
+      - bicep/hub-spoke-plink/README.md
+
+variables:
+  serviceCxn: 'internal_azure_subscription'
+  location: 'australiaeast'
+  resourceGroupName: 'test-hub-rg'
+  hubVnetName: 'hub-vnet'
+  deploymentName: 'hubDeployment'
+
+pool:
+  vmImage: 'ubuntu-latest'    
+
+stages:
+  - stage: build
+    displayName: 'compile bicep to ARM template'
+    jobs:
+      - job: compileBicepToARM
+        steps:
+
+          - task: AzureCLI@2
+            displayName: 'compile Bicep to ARM template'
+            inputs:
+              azureSubscription: $(serviceCxn)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                az bicep build --file ./bicep/hub-spoke-plink/hub.bicep
+
+          - task: CopyFiles@2
+            displayName: 'copy ARM template file to staging directory'
+            inputs:
+              SourceFolder: $(Build.SourcesDirectory)/bicep/hub-spoke-plink
+              Contents: 'hub.json'
+              TargetFolder: $(Build.ArtifactStagingDirectory)/templates
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'publish ARM template artifacts'
+            inputs:
+              ArtifactName: 'templates'
+              PathtoPublish: $(Build.ArtifactStagingDirectory)/templates
+
+  - stage: deploy
+    displayName: 'deploy hub infrastructure'
+    jobs:
+
+      - job: deployHubInfra
+        displayName: 'deploy hub'
+        steps:
+
+          - task: DownloadBuildArtifacts@0
+            displayName: 'download compiled ARM template'
+            inputs:
+              buildType: 'current'
+              downloadType: 'Single'
+              downloadPath: '$(Pipeline.Workspace)'
+              artifactName: 'templates'
+
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: $(serviceCxn)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                az group create --name $(resourceGroupName) --location $(location)
+
+                az deployment group create `
+                  --name $(deploymentName) `
+                  --template-file $(Pipeline.Workspace)/templates/hub.json `
+                  --resource-group $(resourceGroupName) `
+                  --parameters hubVnetName=$(hubVnetName)

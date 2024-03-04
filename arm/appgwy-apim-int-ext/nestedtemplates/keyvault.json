@@ -1,0 +1,77 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "keyVaultUserObjectId": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "resgpguid": "[substring(replace(guid(resourceGroup().id), '-', ''), 0, 4)]",
+        "keyvaultName": "[concat('keyvault-', variables('resgpguid'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.KeyVault/vaults",
+            "apiVersion": "2018-02-14",
+            "name": "[variables('keyvaultName')]",
+            "location": "[resourceGroup().location]",
+            "tags": {
+                "displayName": "[variables('keyvaultName')]"
+            },
+            "properties": {
+                "enabledForDeployment": true,
+                "enabledForTemplateDeployment": true,
+                "enabledForDiskEncryption": true,
+                "createMode": "default",
+                "tenantId": "[subscription().tenantId]",
+                "accessPolicies": [
+                    {
+                        "tenantId": "[subscription().tenantId]",
+                        "objectId": "[parameters('keyVaultUserObjectId')]",
+                        "permissions": {
+                            "keys": [
+                                "get",
+                                "list",
+                                "create",
+                                "import"
+                            ],
+                            "secrets": [
+                                "get",
+                                "list",
+                                "set"
+                            ],
+                            "certificates": [
+                                "get",
+                                "list",
+                                "create",
+                                "import",
+                                "update"
+                            ]
+                        }
+                    }
+                ],
+                "sku": {
+                    "name": "standard",
+                    "family": "A"
+                }
+            },
+            "resources": [
+            ]
+        }
+    ],
+    "outputs": {
+        "keyVaultId": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.KeyVault/vaults', variables('keyvaultName'))]"
+        },
+        "keyVaultUri": {
+            "type": "string",
+            "value": "[reference(variables('keyvaultName')).vaultUri]"
+        },
+        "keyVaultName": {
+            "type": "string",
+            "value": "[variables('keyvaultName')]"
+        }
+    }
+}

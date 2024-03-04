@@ -1,0 +1,314 @@
+# specific path build
+trigger:
+  branches:
+    include:
+    - master
+    - develop
+  paths:
+    exclude:
+    - terraform/aks-csi-provider/*
+  
+variables:
+  # ADO_SERVICE_CONNECTION_NAME: # variable set in variable group 'aks_terraform_vars'
+  # ON_PREMISES_ROUTER_DNS_HOST_NAME # variable set in variable group 'aks_terraform_vars'
+  # SSH_KEY # variable set in variable group 'aks_terraform_vars'
+  # SHARED_VPN_SECRET # variable set in variable group 'aks_terraform_vars'
+  # TF_STATE_STORAGE_ACCOUNT_NAME # variable set in variable group 'aks_terraform_vars'
+    - group: aks_terraform_vars
+    - name: TF_PATH
+      value: ./terraform/aks-csi-provider/terraform
+    - name: UMID_NAME
+      value: 'aad-pod-identity-key-vault-user'
+    - name: LOCATION
+      value: australiaeast
+    - name: AKS_VERSION
+      value: 1.18.8
+
+stages:
+- stage: dev
+  displayName: 'Deploy infrastructure to the dev environment'
+  jobs:
+  - deployment: deploy_aks_infra
+    displayName: deploy AKS infrastructure
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: aks-csi-provider-dev
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - task: AzureCLI@2
+            displayName: 'Setup authentication for Terraform'
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              addSpnToEnvironment: true # ensures 'servicePrincipalId' & 'servicePrincipalKey' values are available to Terraform
+              failOnStandardError: true
+              scriptLocation: inlineScript
+              scriptType: pscore
+              inlineScript: |   
+                # set Terraform authN variables
+                Write-Host "##vso[task.setvariable variable=ARM_SUBSCRIPTION_ID]$(az account show | ConvertFrom-Json | Select-Object -expandProperty id)"
+                Write-Host "##vso[task.setvariable variable=ARM_CLIENT_ID]$env:servicePrincipalId"
+                Write-Host "##vso[task.setvariable variable=ARM_CLIENT_SECRET]$env:servicePrincipalKey"
+                Write-Host "##vso[task.setvariable variable=ARM_TENANT_ID]$(az account show | ConvertFrom-Json | Select-Object -expandProperty tenantId)"
+                Write-Host "##vso[task.setvariable variable=ARM_ACCESS_KEY]$((az storage account keys list -n $(TF_STATE_STORAGE_ACCOUNT_NAME) | ConvertFrom-Json)[0].value)"
+          
+          - task: AzureCLI@2
+            displayName: 'Get Latest AKS version'
+            enabled: false
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                $aksVersions = az aks  get-versions --location $(LOCATION) | ConvertFrom-Json
+                $latestAksVersion = $aksVersions.orchestrators |  
+                  Select-Object -expand orchestratorversion | 
+                  Foreach-Object {[System.Version]$_} | 
+                  Sort-Object -Descending | 
+                  Select-Object -First 1
+
+                Write-Host "##vso[task.setvariable variable=AKS_VERSION]$latestAksVersion"
+
+          - task: AzureCLI@2
+            displayName: 'Deploy AKS Infrastructure'
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              workingDirectory: $(TF_PATH)
+              inlineScript: |
+                
+                # Initialize Terraform
+                Write-Host "############# Terraform init ############"
+                terraform init -input=false
+
+                # Create plan
+                Write-Host "############# Terraform plan ############"
+                terraform plan -var 'tenant_id=$(TENANT_ID)' -var 'azure-service-connection-objectid=$(ARM_CLIENT_ID)' -var 'kubernetesVersion=$(AKS_VERSION)' -var 'ssh_key=$(SSH_KEY)' -var 'csi_provider_demo_key_vault_user_password=$(CSI_PROVIDER_DEMO_KEY_VAULT_USER_PASSWORD)' -out tfplan
+
+                # Show plan
+                Write-Host "############# Terraform show ############"
+                $plan = terraform show -json | ConvertFrom-Json
+                Write-Host $plan.values
+
+                # Apply plan
+                Write-Host "############# Terraform apply ############"
+                terraform apply -auto-approve tfplan
+
+                # Output apply
+                # Set Terraform output as pipeline environment variables
+                Write-Host "############# Terraform output ############"
+                $tfOutput = terraform output -json | ConvertFrom-Json
+                Write-Host "##vso[task.setvariable variable=RESOURCE_GROUP_NAME]$($tfOutput.'resource-group-name'.value)"
+                Write-Host "##vso[task.setvariable variable=CLUSTER_NAME]$($tfOutput.'aks-cluster-name'.value)"
+                Write-Host "##vso[task.setvariable variable=CLUSTER_RESOURCE_GROUP_NAME]$($tfOutput.'aks-node-rg'.value)"
+                Write-Host "##vso[task.setvariable variable=CLUSTER_ID]$($tfOutput.'aks-cluster-id'.value)"
+                Write-Host "##vso[task.setvariable variable=KEY_VAULT_ID]$($tfOutput.'kv-resource-id'.value)"
+                Write-Host "##vso[task.setvariable variable=KEY_VAULT_NAME]$($tfOutput.'kv-name'.value)"
+                Write-Host "##vso[task.setvariable variable=KUBECONFIG]$($tfOutput.'kube-config'.value)"           
+
+          - task: Kubernetes@1
+            displayName: 'Get AKS nodes'
+            inputs:
+               command: get
+               arguments: nodes
+               connectionType: Azure Resource Manager
+               azureSubscriptionEndpoint: $(ADO_SERVICE_CONNECTION_NAME)
+               azureResourceGroup: $(RESOURCE_GROUP_NAME)
+               kubernetesCluster: $(CLUSTER_NAME)
+               useClusterAdmin: true
+
+          - task: HelmInstaller@1
+            displayName: 'Install Helm'
+            inputs:
+              helmVersionToInstall: 'latest'
+
+          - task: HelmDeploy@0
+            displayName: "Add Helm repo 'csi-secrets-store-provider-azure'"
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              azureResourceGroup: $(RESOURCE_GROUP_NAME)
+              kubernetesCluster: $(CLUSTER_NAME)
+              connectionType: Azure Resource Manager
+              command:  repo
+              arguments: add csi-secrets-store-provider-azure https://raw.githubusercontent.com/Azure/secrets-store-csi-driver-provider-azure/master/charts
+
+          - task: HelmDeploy@0
+            displayName: "'Add repo 'aad-pod-identity/aad-pod-identity'"
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              azureResourceGroup: $(RESOURCE_GROUP_NAME)
+              kubernetesCluster: $(CLUSTER_NAME)
+              connectionType: Azure Resource Manager
+              command:  repo
+              arguments: add aad-pod-identity https://raw.githubusercontent.com/Azure/aad-pod-identity/master/charts    
+
+          - task: AzureCLI@2
+            displayName: 'Create User Assigned Managed Identity & Assign role to Key Vault'
+            inputs:
+              scriptType: pscore
+              scriptLocation: inlineScript
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              inlineScript: |
+                "Creating user assigned managed identity: $(UMID_NAME)"
+                $umid = az identity create -g $(RESOURCE_GROUP_NAME) -n $(UMID_NAME) | ConvertFrom-Json
+
+                "Get cluster managed identity"
+                $mid = az aks show -g $(RESOURCE_GROUP_NAME) -n $(CLUSTER_NAME) --query identityProfile.kubeletidentity.clientId -otsv
+                $midObjectId = az aks show -g $(RESOURCE_GROUP_NAME) -n $(CLUSTER_NAME) --query identityProfile.kubeletidentity.objectId -otsv
+
+                "Assign cluster managed identity roles"
+                az role assignment create --role "Managed Identity Operator" --assignee-object-id $midObjectId --scope "/subscriptions/$(ARM_SUBSCRIPTION_ID)/resourcegroups/$(CLUSTER_RESOURCE_GROUP_NAME)"
+                az role assignment create --role "Virtual Machine Contributor" --assignee-object-id $midObjectId --scope "/subscriptions/$(ARM_SUBSCRIPTION_ID)/resourcegroups/$(CLUSTER_RESOURCE_GROUP_NAME)"
+                az role assignment create --role "Managed Identity Operator" --assignee-object-id $midObjectId --scope $umid.id
+
+                "Assign Reader Role to new Identity for keyvault: $(KEY_VAULT_ID)"
+                az role assignment create --role Reader --assignee-object-id $umid.principalId --scope $(KEY_VAULT_ID)
+
+                "Set policy to access secrets in keyvault: $(KEY_VAULT_NAME)"
+                az keyvault set-policy -g $(RESOURCE_GROUP_NAME) -n $(KEY_VAULT_NAME) --secret-permissions get --object-id $umid.principalId
+
+                Write-Host "##vso[task.setvariable variable=UMID_RESOURCE_ID]$($umid.id)"
+                Write-Host "##vso[task.setvariable variable=UMID_CLIENT_ID]$($umid.clientId)"
+                Write-Host "##vso[task.setvariable variable=UMID_PRINCIPAL_ID]$($umid.principalId)"
+
+          - task: HelmDeploy@0
+            continueOnError: true
+            displayName: 'Deploy AAD Pod Identity Component'
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              azureResourceGroup: $(RESOURCE_GROUP_NAME)
+              kubernetesCluster: $(CLUSTER_NAME)
+              connectionType: Azure Resource Manager
+              command: upgrade
+              arguments: --install --force
+              chartName: aad-pod-identity/aad-pod-identity
+              releaseName: my-pod-identity-release
+
+          - task: Kubernetes@1
+            displayName: 'Deploy AzureIdentity'
+            inputs:
+              azureSubscriptionEndpoint: $(ADO_SERVICE_CONNECTION_NAME)
+              connectionType: Azure Resource Manager
+              azureResourceGroup: $(RESOURCE_GROUP_NAME)
+              command: apply
+              kubernetesCluster: $(CLUSTER_NAME)
+              useConfigurationFile: true
+              inline: |
+                apiVersion: "aadpodidentity.k8s.io/v1"
+                kind: AzureIdentity
+                metadata:
+                  name: key-vault-aad-pod-azure-identity
+                spec:
+                  type: 0
+                  resourceID: $(UMID_RESOURCE_ID)
+                  clientID: $(UMID_CLIENT_ID)
+
+          - task: Kubernetes@1
+            displayName: 'Deploy AzureIdentityBinding'
+            inputs:
+              azureSubscriptionEndpoint: $(ADO_SERVICE_CONNECTION_NAME)
+              connectionType: Azure Resource Manager
+              azureResourceGroup: $(RESOURCE_GROUP_NAME)
+              command: apply
+              kubernetesCluster: $(CLUSTER_NAME)
+              useConfigurationFile: true
+              inline: |
+                apiVersion: "aadpodidentity.k8s.io/v1"
+                kind: AzureIdentityBinding
+                metadata:
+                  name: key-vault-aad-pod-azure-identity-binding
+                spec:
+                  azureIdentity: key-vault-aad-pod-azure-identity
+                  selector: my-app
+
+          - task: HelmDeploy@0
+            continueOnError: true
+            displayName: 'Install Azure Key Vault CSI provider'
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              azureResourceGroup: $(RESOURCE_GROUP_NAME)
+              kubernetesCluster: $(CLUSTER_NAME)
+              connectionType: Azure Resource Manager
+              command: upgrade
+              arguments: --install --force
+              chartName: csi-secrets-store-provider-azure/csi-secrets-store-provider-azure
+
+          - task: Kubernetes@1
+            displayName: 'Deploy SecretProviderClass'
+            inputs:
+              azureSubscriptionEndpoint: $(ADO_SERVICE_CONNECTION_NAME)
+              connectionType: Azure Resource Manager
+              azureResourceGroup: $(RESOURCE_GROUP_NAME)
+              command: apply
+              kubernetesCluster: $(CLUSTER_NAME)
+              useConfigurationFile: true
+              inline: |
+                apiVersion: secrets-store.csi.x-k8s.io/v1alpha1
+                kind: SecretProviderClass
+                metadata:
+                  name: azure-kvname-podid
+                spec:
+                  provider: azure                   
+                  parameters:
+                    usePodIdentity: "true" 
+                    useVMManagedIdentity: "false"
+                    userAssignedIdentityID: ""
+                    keyvaultName: $(KEY_VAULT_NAME)
+                    cloudName: "AzurePublicCloud"
+                    objects:  |
+                      array:
+                        - |
+                          objectName: mysecret
+                          objectAlias: mysecret
+                          objectType: secret
+                          objectVersion: ""
+
+                    resourceGroup: $(RESOURCE_GROUP_NAME)
+                    subscriptionId: $(ARM_SUBSCRIPTION_ID)
+                    tenantId: $(ARM_TENANT_ID) # the tenant ID of the KeyVault
+
+          - task: Kubernetes@1
+            displayName: 'Deploy NGINX container with secret from Key Vault'
+            inputs:
+              azureSubscriptionEndpoint: $(ADO_SERVICE_CONNECTION_NAME)
+              connectionType: Azure Resource Manager
+              azureResourceGroup: $(RESOURCE_GROUP_NAME)
+              command: apply
+              kubernetesCluster: $(CLUSTER_NAME)
+              useConfigurationFile: true
+              inline: |
+                kind: Pod
+                apiVersion: v1
+                metadata:
+                  name: nginx-secrets-store-inline-podid
+                  labels:
+                    aadpodidbinding: "my-app"
+                spec:
+                  containers:
+                    - name: nginx
+                      image: nginx
+                      volumeMounts:
+                      - name: secrets-store01-inline
+                        mountPath: "/mnt/secrets-store"
+                        readOnly: true
+                  volumes:
+                    - name: secrets-store01-inline
+                      csi:
+                        driver: secrets-store.csi.k8s.io
+                        readOnly: true
+                        volumeAttributes:
+                          secretProviderClass: "azure-kvname-podid"   
+
+          - task: Kubernetes@1
+            displayName: 'Display Key Vault secret from NGINX container'
+            inputs:
+              azureSubscriptionEndpoint: $(ADO_SERVICE_CONNECTION_NAME)
+              connectionType: Azure Resource Manager
+              azureResourceGroup: $(RESOURCE_GROUP_NAME)
+              command: exec
+              kubernetesCluster: $(CLUSTER_NAME)
+              arguments: nginx-secrets-store-inline-podid cat /mnt/secrets-store/mysecret
+              outputFormat: json

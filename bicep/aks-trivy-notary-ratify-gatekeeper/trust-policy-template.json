@@ -1,0 +1,16 @@
+{
+    "version": "1.0",
+    "trustPolicies": [
+        {
+            "name": "bellee-io-images",
+            "registryScopes": [ "<REGISTRY>/<REPO>" ],
+            "signatureVerification": {
+                "level" : "strict" 
+            },
+            "trustStores": [ "<STORE_TYPE>:<STORE_NAME>" ],
+            "trustedIdentities": [
+                "x509.subject: <CERT_SUBJECT>"
+            ]
+        }
+    ]
+}

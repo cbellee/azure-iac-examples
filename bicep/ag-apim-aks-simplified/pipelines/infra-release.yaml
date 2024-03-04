@@ -1,0 +1,161 @@
+parameters:
+  - name: 'vmImage'
+    default: 'ubuntu-latest'
+    type: string
+  - name: 'poolName'
+    default: 'Azure Pipelines'
+  - name: 'location'
+    default: 'australiaeast'
+    type: string
+  - name: 'environment'
+    type: string
+  - name: 'azureConnection'
+    default: 'internal_azure_subscription'
+    type: string
+  - name: subscriptionId
+    default: 'b2375b5f-8dab-4436-b87c-32bc7fdce5d0'
+    type: string
+  - name: 'resourceGroupName'
+    default: 'ag-apim-aks-rg'
+    type: string
+  - name:  'aksAdminGroupObjectId'
+    default: 'f6a900e2-df11-43e7-ba3e-22be99d3cede'
+    type: string
+  - name: 'publicDnsZone'
+    type: string
+  - name: 'publicDnsZoneResourceGroup'
+    type: string
+  - name: 'reactSpaSvcIp'
+    type: string
+  - name: 'keyVaultName'
+    type: string
+  - name: 'aksVersion'
+    type: string
+  - name: 'tlsCertSecretId'
+    type: string
+  - name: 'keyVaultResourceGroupName'
+    type: string
+  - name: gitRepoUrl
+    type: string
+
+stages:
+- stage: dev
+  jobs:
+  - deployment: 
+    displayName: 'dev_infrastructure_deployment'
+    pool:
+      name: ${{parameters.poolName}}
+    environment: ag-apim-aks-dev
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - task: DownloadPipelineArtifact@2
+              inputs:
+                buildType: 'current'
+                artifactName: 'drop'
+                targetPath: $(System.ArtifactsDirectory)
+            - task: AzureResourceManagerTemplateDeployment@3
+              displayName: 'Validate Infrastructure Templates'
+              inputs:
+                azureResourceManagerConnection: ${{parameters.azureConnection}}
+                subscriptionId: ${{parameters.subscriptionId}}
+                resourceGroupName: ${{parameters.resourceGroupName}}-dev-${{parameters.location}}-rg
+                location: ${{parameters.location}}
+                csmFile: '$(System.ArtifactsDirectory)/main.bicep'
+                csmParametersFile: $(System.ArtifactsDirectory)/dev.parameters.json
+                overrideParameters: '-publicDnsZoneName ${{parameters.publicDnsZone}} -publicDnsZoneResourceGroup ${{parameters.publicDnsZoneResourceGroup}} -privateDnsZoneName "dev.${{parameters.publicDnsZone}}" -aksAdminGroupObjectId ${{parameters.aksAdminGroupObjectId}} -kubernetesSpaIpAddress ${{parameters.reactSpaSvcIp}} -keyVaultName ${{parameters.keyVaultName}} -tlsCertSecretId ${{parameters.tlsCertSecretId}} -aksVersion ${{parameters.aksVersion}} -location ${{parameters.location}} -keyVaultResourceGroupName ${{parameters.keyVaultResourceGroupName}} -gitRepoUrl ${{parameters.gitRepoUrl}}'
+                deploymentMode: Validation
+                deploymentName: 'dev-validate-infra-deployment'
+            - task: AzureResourceManagerTemplateDeployment@3
+              displayName: 'Deploy Infrastructure Templates'
+              inputs:
+                azureResourceManagerConnection: ${{parameters.azureConnection}}
+                subscriptionId: ${{parameters.subscriptionId}}
+                resourceGroupName: ${{parameters.resourceGroupName}}-dev-${{parameters.location}}-rg
+                location: ${{parameters.location}}
+                csmFile: '$(System.ArtifactsDirectory)/main.bicep'
+                csmParametersFile: $(System.ArtifactsDirectory)/dev.parameters.json
+                overrideParameters: '-publicDnsZoneName ${{parameters.publicDnsZone}} -publicDnsZoneResourceGroup ${{parameters.publicDnsZoneResourceGroup}} -privateDnsZoneName "dev.${{parameters.publicDnsZone}}" -aksAdminGroupObjectId ${{parameters.aksAdminGroupObjectId}} -kubernetesSpaIpAddress ${{parameters.reactSpaSvcIp}} -keyVaultName ${{parameters.keyVaultName}} -tlsCertSecretId ${{parameters.tlsCertSecretId}} -aksVersion ${{parameters.aksVersion}} -location ${{parameters.location}} -keyVaultResourceGroupName ${{parameters.keyVaultResourceGroupName}} -gitRepoUrl ${{parameters.gitRepoUrl}}'
+                deploymentMode: Incremental
+                deploymentName: 'dev-infra-deployment'
+- stage: test
+  jobs:
+  - deployment: 
+    displayName: 'test_infrastructure_deployment'
+    pool:
+      name: ${{parameters.poolName}}
+    environment: ag-apim-aks-test
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - task: DownloadPipelineArtifact@2
+              inputs:
+                buildType: 'current'
+                artifactName: 'drop'
+                targetPath: $(System.ArtifactsDirectory)
+            - task: AzureResourceManagerTemplateDeployment@3
+              displayName: 'Validate Infrastructure Templates'
+              inputs:
+                azureResourceManagerConnection: ${{parameters.azureConnection}}
+                subscriptionId: ${{parameters.subscriptionId}}
+                resourceGroupName: ${{parameters.resourceGroupName}}-test-${{parameters.location}}-rg
+                location: ${{parameters.location}}
+                csmFile: '$(System.ArtifactsDirectory)/main.bicep'
+                csmParametersFile: $(System.ArtifactsDirectory)/test.parameters.json
+                overrideParameters: '-publicDnsZoneName ${{parameters.publicDnsZone}} -publicDnsZoneResourceGroup ${{parameters.publicDnsZoneResourceGroup}} -privateDnsZoneName "test.${{parameters.publicDnsZone}}" -aksAdminGroupObjectId ${{parameters.aksAdminGroupObjectId}} -kubernetesSpaIpAddress ${{parameters.reactSpaSvcIp}} -keyVaultName ${{parameters.keyVaultName}} -tlsCertSecretId ${{parameters.tlsCertSecretId}} -aksVersion ${{parameters.aksVersion}} -location ${{parameters.location}} -keyVaultResourceGroupName ${{parameters.keyVaultResourceGroupName}} -gitRepoUrl ${{parameters.gitRepoUrl}}'
+                deploymentMode: Validation
+                deploymentName: 'test-validate-infra-deployment'
+            - task: AzureResourceManagerTemplateDeployment@3
+              displayName: 'Deploy Infrastructure Templates'
+              inputs:
+                azureResourceManagerConnection: ${{parameters.azureConnection}}
+                subscriptionId: ${{parameters.subscriptionId}}
+                resourceGroupName: ${{parameters.resourceGroupName}}-test-${{parameters.location}}-rg
+                location: ${{parameters.location}}
+                csmFile: '$(System.ArtifactsDirectory)/main.bicep'
+                csmParametersFile: $(System.ArtifactsDirectory)/test.parameters.json
+                overrideParameters: '-publicDnsZoneName ${{parameters.publicDnsZone}} -publicDnsZoneResourceGroup ${{parameters.publicDnsZoneResourceGroup}} -privateDnsZoneName "test.${{parameters.publicDnsZone}}" -aksAdminGroupObjectId ${{parameters.aksAdminGroupObjectId}} -kubernetesSpaIpAddress ${{parameters.reactSpaSvcIp}} -keyVaultName ${{parameters.keyVaultName}} -tlsCertSecretId ${{parameters.tlsCertSecretId}} -aksVersion ${{parameters.aksVersion}} -location ${{parameters.location}} -keyVaultResourceGroupName ${{parameters.keyVaultResourceGroupName}} -gitRepoUrl ${{parameters.gitRepoUrl}}'
+                deploymentMode: Incremental
+                deploymentName: 'test-infra-deployment'
+- stage: prod
+  jobs:
+  - deployment: 
+    displayName: 'prod_infrastructure_deployment'
+    pool:
+      name: ${{parameters.poolName}}
+    environment: ag-apim-aks-prod
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - task: DownloadPipelineArtifact@2
+              inputs:
+                buildType: 'current'
+                artifactName: 'drop'
+                targetPath: $(System.ArtifactsDirectory)
+            - task: AzureResourceManagerTemplateDeployment@3
+              displayName: 'Validate Infrastructure Templates'
+              inputs:
+                azureResourceManagerConnection: ${{parameters.azureConnection}}
+                subscriptionId: ${{parameters.subscriptionId}}
+                resourceGroupName: ${{parameters.resourceGroupName}}-prod-${{parameters.location}}-rg
+                location: ${{parameters.location}}
+                csmFile: '$(System.ArtifactsDirectory)/main.bicep'
+                csmParametersFile: $(System.ArtifactsDirectory)/prod.parameters.json
+                overrideParameters: '-publicDnsZoneName ${{parameters.publicDnsZone}} -publicDnsZoneResourceGroup ${{parameters.publicDnsZoneResourceGroup}} -privateDnsZoneName "prod.${{parameters.publicDnsZone}}" -aksAdminGroupObjectId ${{parameters.aksAdminGroupObjectId}} -kubernetesSpaIpAddress ${{parameters.reactSpaSvcIp}} -keyVaultName ${{parameters.keyVaultName}} -tlsCertSecretId ${{parameters.tlsCertSecretId}} -aksVersion ${{parameters.aksVersion}} -location ${{parameters.location}} -keyVaultResourceGroupName ${{parameters.keyVaultResourceGroupName}} -gitRepoUrl ${{parameters.gitRepoUrl}}'
+                deploymentMode: Validation
+                deploymentName: 'prod-validate-infra-deployment'
+            - task: AzureResourceManagerTemplateDeployment@3
+              displayName: 'Deploy Infrastructure Templates'
+              inputs:
+                azureResourceManagerConnection: ${{parameters.azureConnection}}
+                subscriptionId: ${{parameters.subscriptionId}}
+                resourceGroupName: ${{parameters.resourceGroupName}}-prod-${{parameters.location}}-rg
+                location: ${{parameters.location}}
+                csmFile: '$(System.ArtifactsDirectory)/main.bicep'
+                csmParametersFile: $(System.ArtifactsDirectory)/prod.parameters.json
+                overrideParameters: '-publicDnsZoneName ${{parameters.publicDnsZone}} -publicDnsZoneResourceGroup ${{parameters.publicDnsZoneResourceGroup}} -privateDnsZoneName "prod.${{parameters.publicDnsZone}}" -aksAdminGroupObjectId ${{parameters.aksAdminGroupObjectId}} -kubernetesSpaIpAddress ${{parameters.reactSpaSvcIp}} -keyVaultName ${{parameters.keyVaultName}} -tlsCertSecretId ${{parameters.tlsCertSecretId}} -aksVersion ${{parameters.aksVersion}} -location ${{parameters.location}} -keyVaultResourceGroupName ${{parameters.keyVaultResourceGroupName}} -gitRepoUrl ${{parameters.gitRepoUrl}}'
+                deploymentMode: Incremental
+                deploymentName: 'prod-infra-deployment'

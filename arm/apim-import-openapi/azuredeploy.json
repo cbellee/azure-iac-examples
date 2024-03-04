@@ -1,0 +1,105 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "apimSku": {
+            "type": "object"
+        },
+        "subnetId": {
+            "type": "string"
+        },
+        "publisherEmail": {
+            "type": "string"
+        },
+        "publisherName": {
+            "type": "string"
+        },
+        "notificationSenderEmail": {
+            "type": "string"
+        },
+        "apis": {
+            "type": "array"
+        },
+        "virtualNetworkType": {
+            "type": "string",
+            "allowedValues": [
+                "Internal",
+                "External",
+                "None"
+            ],
+            "defaultValue": "None"
+        },
+        "tags": {
+            "type": "object"
+        }
+    },
+    "variables": {
+        "resgpguid": "[substring(replace(guid(resourceGroup().id), '-', ''), 0, 6)]",
+        "apiMgmtname": "[concat('api-mgmt-', variables('resgpguid'))]",
+        "virtualNetworkConfiguration": {
+            "subnetResourceId": "[parameters('subnetId')]"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.ApiManagement/service",
+            "apiVersion": "2019-01-01",
+            "name": "[variables('apiMgmtName')]",
+            "location": "[resourceGroup().location]",
+            "tags": "[parameters('tags')]",
+            "dependsOn": [
+            ],
+            "sku": "[parameters('apimSku')]",
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "publisherEmail": "[parameters('publisherEmail')]",
+                "publisherName": "[parameters('publisherName')]",
+                "notificationSenderEmail": "[parameters('notificationSenderEmail')]",
+                "virtualNetworkConfiguration": "[if(not(equals(parameters('virtualNetworkType'), 'None')), variables('virtualNetworkConfiguration'), json('null'))]",
+                "customProperties": {
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TripleDes168": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls10": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls11": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Ssl30": "False",
+                    "Microsoft.WindowsAzure.ApiManagement.Gateway.Protocols.Server.Http2": "False"
+                },
+                "virtualNetworkType": "[parameters('virtualNetworkType')]"
+            }
+        },
+        {
+            "type": "Microsoft.ApiManagement/service/apis",
+            "apiVersion": "2019-01-01",
+            "name": "[concat(variables('apiMgmtName'), '/', parameters('apis')[copyIndex()].path)]",
+            "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+            ],
+            "copy": {
+                "count": "[length(parameters('apis'))]",
+                "name": "apiCopy",
+                "mode": "Serial"
+            },
+            "properties": {
+                "displayName": "[parameters('apis')[copyIndex()].path]",
+                "format": "[parameters('apis')[copyIndex()].format]",
+                "value": "[parameters('apis')[copyIndex()].value]",
+                "path": "[parameters('apis')[copyIndex()].path]",
+                "serviceUrl": "[parameters('apis')[copyIndex()].serviceUrl]",
+                "protocols": [
+                    "http",
+                    "https"
+                ]
+            }
+        }
+    ],
+    "outputs": {
+        "apimDnsName": {
+            "type": "array",
+            "value": "[split(replace(reference(variables('apiMgmtName')).gatewayUrl, 'https://', ''), '.')]"
+        }
+    }
+}

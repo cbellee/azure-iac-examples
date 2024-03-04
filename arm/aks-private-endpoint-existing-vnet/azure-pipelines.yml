@@ -1,0 +1,112 @@
+# specific path build
+trigger:
+  branches:
+    include:
+    - master
+    - develop
+  paths:
+    include:
+    - arm/aks-private-endpoint-existing-vnet/*
+    exclude:
+    - arm/aks-private-endpoint-existing-vnet/azure-pipelines.yml
+variables:
+  # ADO_SERVICE_CONNECTION_NAME: # set in variable  group
+  # LOCATION: # set in variable group
+  - group: aks_arm_vars
+  - name: projectName
+    value: aks-private-endpoint-existing-vnet
+  - name: resourceGroupName
+    value: "$(projectName)-rg"
+  - name: timeStamp
+    value: $[format('{2:yyyy}-{2:MM}-{2:dd}-{2:HHmmss}', 'network', 'deployment', pipeline.startTime)]
+  - name: tags
+    value: '{"costCentre":"478132","project":"$(projectName)"}'
+  - name: containerName
+    value: templates
+  - name: armTemplatePath
+    value: './arm/aks-private-endpoint-existing-vnet'
+
+stages:
+- stage: 'release'
+  displayName: 'environment release'
+  jobs:
+    - job: 'release_job'
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: PowerShell@2
+          inputs:
+            targetType: 'inline'
+            script: |
+              $now = Get-Date
+              $sasTokenExpiry = $now.AddHours(2).ToString('u') -replace ' ','T'
+              Write-Host "##vso[task.setvariable variable=sasTokenExpiry;]$sasTokenExpiry"
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployStorage'
+          displayName: 'Deploy storage account for arm templates'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: $(armTemplatePath)/nestedtemplates/storage.json
+            location: $(LOCATION)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "storageDeployment-$(timeStamp)"
+            outputVariable: storageTemplateOutput
+            overrideParameters: -containerName $(containerName) -sasTokenExpiry $(sasTokenExpiry)
+
+        - task: ARM Outputs@5
+          name: 'GetStorageDeploymentOutput1'
+          displayName: 'Get ARM Storage Deployment Output'
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(ADO_SERVICE_CONNECTION_NAME)
+            resourceGroupName: $(resourceGroupName)
+            whenLastDeploymentIsFailed: 'fail'
+            deploymentNameFilter: "storageDeployment-$(timeStamp)"
+       
+        - task: AzureCLI@1
+          displayName: 'Copy ARM template files to Azure blob storage'
+          enabled: true
+          inputs:
+            azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+            scriptLocation: 'inlineScript'
+            inlineScript: 'az storage blob upload-batch -d $(containerName) -s $(armTemplatePath)/nestedtemplates/ --pattern *.json --account-name $(storageAccountName)'
+
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployResources'
+          displayName: 'Deploy resources'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: $(armTemplatePath)/azuredeploy.json
+            csmParametersFile: $(armTemplatePath)/azuredeploy.parameters.json
+            location: $(LOCATION)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "resourceDeployment-$(timeStamp)"
+            outputVariable: resourceTemplateOutput
+            overrideParameters: 
+              -storageUri "$(storageContainerUri)" `
+              -sasToken "$(storageAccountSasToken)" `
+              -sshPublicKey "$(SSH_KEY)" `
+              -aksVnetName 'aks-vnet-1' `
+              -aksSubnetName 'aks-subnet-1' `
+              -firewallSubnetName 'firewall-subnet' `
+              -aadAdminGroupObjectId "$(AAD_ADMIN_GROUP_ID)"
+
+        - task: ARM Outputs@5
+          name: 'GetResourceDeploymentOutput1'
+          displayName: 'Get ARM Resource Deployment Output'
+          enabled: true
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(ADO_SERVICE_CONNECTION_NAME)
+            resourceGroupName: $(resourceGroupName)
+            whenLastDeploymentIsFailed: 'fail'
+            deploymentNameFilter: "resourceDeployment-$(timeStamp)"

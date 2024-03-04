@@ -1,0 +1,17 @@
+apiVersion: storage.azure.upbound.io/v1beta1
+kind: Account
+metadata:
+  ##make sure the length is less 24 char
+  name: stordemocbellee
+spec:
+  forProvider:
+    location: australiaeast
+    accountReplicationType: LRS
+    accountTier: Standard
+    resourceGroupNameRef:
+      name: crossplane-test-rg
+  providerRef:
+    name: default
+  writeConnectionSecretToRef:
+    namespace: default
+    name: storageaccount-connection-secret 

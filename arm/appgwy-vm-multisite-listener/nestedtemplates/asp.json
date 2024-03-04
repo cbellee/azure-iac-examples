@@ -1,0 +1,60 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "name": {
+            "type": "string"
+        },
+        "suffix": {
+            "type": "string"
+        },
+        "sku": {
+            "type": "object",
+            "defaultValue": {
+                "name": "P1v2",
+                "tier": "PremiumV2",
+                "size": "P1v2",
+                "family": "Pv2",
+                "capacity": 1
+            }
+        },
+        "kind": {
+            "type": "string",
+            "defaultValue": "linux"
+        },
+        "tags": {
+            "type": "object"
+        }
+    },
+    "variables": {
+        "aspName": "[concat(parameters('name'), '-', parameters('suffix'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Web/serverfarms",
+            "apiVersion": "2018-02-01",
+            "name": "[variables('aspName')]",
+            "location": "[resourceGroup().location]",
+            "sku": "[parameters('sku')]",
+            "kind": "[parameters('kind')]",
+            "tags": "[parameters('tags')]",
+            "properties": {
+                "name": "[variables('aspName')]",
+                "perSiteScaling": false,
+                "reserved": true,
+                "targetWorkerCount": 0,
+                "targetWorkerSizeId": 0
+            }
+        }
+    ],
+    "outputs": {
+        "aspResourceId": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.Web/serverfarms', variables('aspName'))]"
+        },
+        "aspName": {
+            "type": "string",
+            "value": "[variables('aspName')]"
+        }
+    }
+}

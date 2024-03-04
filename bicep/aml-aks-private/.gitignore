@@ -1,0 +1,4 @@
+certs/
+*.vsdx
+*.pptx
+**/.env

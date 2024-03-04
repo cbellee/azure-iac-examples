@@ -1,0 +1,61 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentMode": {
+            "value": "Incremental"
+        },
+        "vNets": {
+            "value": [
+                {
+                    "name": "vnet",
+                    "addressPrefixes": [
+                        "10.0.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "AppGatewaySubnet",
+                            "addressPrefix": "10.0.1.0/24",
+                            "nsgName": null,
+                            "udrName": null,
+                            "delegations": null
+                        }
+                    ]
+                }
+            ]
+        },
+        "storageUri": {
+            "value": null
+        },
+        "sasToken": {
+            "value": null
+        },
+        "tags": {
+            "value": {
+                "costCenter": "123456789",
+                "dept": "it"
+            }
+        },
+        "applicationGatewaySku": {
+            "value": {
+                "name": "Standard_v2",
+                "tier": "Standard_v2"
+            }
+        },
+        "dockerImageName": {
+            "value": "mendhak/http-https-echo:latest"
+        },
+        "appNames": {
+            "value": [
+                "front-end",
+                "back-end"
+            ]
+        },
+        "pfxCertificate": {
+            "value": null
+        },
+        "pfxCertificatePassword": {
+            "value": null
+        }
+    }
+}

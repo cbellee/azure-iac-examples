@@ -1,0 +1,164 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "applicationGatewaySku": {
+            "type": "string",
+            "allowedValues": [
+                "Standard_v2",
+                "WAF_v2"
+            ],
+            "defaultValue": "WAF_v2"
+        },
+        "applicationGatewaySubnetId": {
+            "type": "string"
+        },
+        "tags": {
+            "type": "object"
+        },
+        "suffix": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "applicationGatewayPublicIpName": "[concat('appgwy-pip-' , parameters('suffix'))]",
+        "applicationGatewayName": "[concat('appgwy-' , parameters('suffix'))]",
+        "applicationGatewayPublicIpId": "[resourceId('Microsoft.Network/publicIPAddresses',variables('applicationGatewayPublicIpName'))]",
+        "applicationGatewayId": "[resourceId('Microsoft.Network/applicationGateways', variables('applicationGatewayName'))]",
+        "webApplicationFirewallConfiguration": {
+            "enabled": "true",
+            "firewallMode": "Detection"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "name": "[variables('applicationGatewayPublicIpName')]",
+            "apiVersion": "2018-08-01",
+            "location": "[resourceGroup().location]",
+            "sku": {
+                "name": "Standard"
+            },
+            "tags": "[parameters('tags')]",
+            "properties": {
+                "publicIPAllocationMethod": "Static"
+            }
+        },
+        {
+            "type": "Microsoft.Network/applicationGateways",
+            "name": "[variables('applicationGatewayName')]",
+            "apiVersion": "2018-08-01",
+            "location": "[resourceGroup().location]",
+            "tags": {
+                "managed-by-k8s-ingress": "true"
+            },
+            "dependsOn": [
+                "[concat('Microsoft.Network/publicIPAddresses/', variables('applicationGatewayPublicIpName'))]"
+            ],
+            "properties": {
+                "sku": {
+                    "name": "[parameters('applicationGatewaySku')]",
+                    "tier": "[parameters('applicationGatewaySku')]",
+                    "capacity": 2
+                },
+                "gatewayIPConfigurations": [
+                    {
+                        "name": "appGatewayIpConfig",
+                        "properties": {
+                            "subnet": {
+                                "id": "[parameters('applicationGatewaySubnetId')]"
+                            }
+                        }
+                    }
+                ],
+                "frontendIPConfigurations": [
+                    {
+                        "name": "appGatewayFrontendIP",
+                        "properties": {
+                            "PublicIPAddress": {
+                                "id": "[variables('applicationGatewayPublicIpId')]"
+                            }
+                        }
+                    }
+                ],
+                "frontendPorts": [
+                    {
+                        "name": "httpPort",
+                        "properties": {
+                            "Port": 80
+                        }
+                    },
+                    {
+                        "name": "httpsPort",
+                        "properties": {
+                            "Port": 443
+                        }
+                    }
+                ],
+                "backendAddressPools": [
+                    {
+                        "name": "bepool",
+                        "properties": {
+                            "backendAddresses": [
+                            ]
+                        }
+                    }
+                ],
+                "httpListeners": [
+                    {
+                        "name": "httpListener",
+                        "properties": {
+                            "protocol": "Http",
+                            "frontendPort": {
+                                "id": "[concat(variables('applicationGatewayId'), '/frontendPorts/httpPort')]"
+                            },
+                            "frontendIPConfiguration": {
+                                "id": "[concat(variables('applicationGatewayId'), '/frontendIPConfigurations/appGatewayFrontendIP')]"
+                            }
+                        }
+                    }
+                ],
+                "backendHttpSettingsCollection": [
+                    {
+                        "name": "setting",
+                        "properties": {
+                            "port": 80,
+                            "protocol": "Http"
+                        }
+                    }
+                ],
+                "requestRoutingRules": [
+                    {
+                        "name": "rule1",
+                        "properties": {
+                            "httpListener": {
+                                "id": "[concat(variables('applicationGatewayId'), '/httpListeners/httpListener')]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[concat(variables('applicationGatewayId'), '/backendAddressPools/bepool')]"
+                            },
+                            "backendHttpSettings": {
+                                "id": "[concat(variables('applicationGatewayId'), '/backendHttpSettingsCollection/setting')]"
+                            }
+                        }
+                    }
+                ],
+                "webApplicationFirewallConfiguration": "[if(equals(parameters('applicationGatewaySku'), 'WAF_v2'), variables('webApplicationFirewallConfiguration'), json('null'))]"
+            }
+        }
+    ],
+    "outputs": {
+        "applicationGatewayId": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.Network/applicationGateways', variables('applicationGatewayName'))]"
+        },
+        "applicationGatewayName": {
+            "type": "string",
+            "value": "[variables('applicationGatewayName')]"
+        },
+        "applicationGatewayPublicIpResourceId": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.Network/publicIPAddresses', variables('applicationGatewayPublicIpName'))]"
+        }
+    }
+}

@@ -1,0 +1,209 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentMode": {
+            "type": "string",
+            "allowedValues": [
+                "Incremental",
+                "Complete"
+            ],
+            "defaultValue": "Incremental"
+        },
+        "storageUri": {
+            "type": "string"
+        },
+        "tags": {
+            "type": "object"
+        },
+        "vNets": {
+            "type": "array"
+        },
+        "sasToken": {
+            "type": "string"
+        },
+        "appName": {
+            "type": "string"
+        },
+        "dockerImageName": {
+            "type": "string",
+            "defaultValue": "mendhak/http-https-echo:latest"
+        },
+        "applicationGatewaySku": {
+            "type": "object",
+            "defaultValue": {
+                "name": "Standard_v2",
+                "tier": "Standard_v2"
+            }
+        },
+        "pfxCertificateSecretId": {
+            "type": "string"
+        },
+        "userAssignedIdentityResourceId": {
+            "type": "string"
+        },
+        "dnsZoneName": {
+            "type": "string",
+            "defaultValue": "kainiindustries.net"
+        }
+    },
+    "variables": {
+        "resgpguid": "[substring(replace(guid(resourceGroup().id), '-', ''), 0, 6)]",
+        "appName": "[concat(parameters('appName'), '-', variables('resgpguid'))]"
+    },
+    "resources": [
+        {
+            "name": "[concat('linkedTemplate-vnet', '-', copyIndex())]",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2017-05-10",
+            "comments": "This deployment links to the gatewayVpn nested ARM template",
+            "dependsOn": [
+
+            ],
+            "condition": true,
+            "resourceGroup": "[resourceGroup().name]",
+            "copy": {
+                "name": "vnetCopy",
+                "count": "[length(parameters('vNets'))]"
+            },
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    },
+                    "vNet": {
+                        "value": "[parameters('vNets')[copyIndex()]]"
+                    },
+                    "tags": {
+                        "value": "[parameters('tags')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'vnets.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "name": "linkedTemplate-asp",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2019-05-01",
+            "comments": "This deployment links to the app service plan nested ARM template",
+            "dependsOn": [
+                "vnetCopy"
+            ],
+            "condition": true,
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "name": {
+                        "value": "asp-linux"
+                    },
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    },
+                    "tags": {
+                        "value": "[parameters('tags')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'asp.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "name": "linkedTemplate-app",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2019-05-01",
+            "comments": "This deployment links to the web app nested ARM template",
+            "dependsOn": [
+                "linkedTemplate-asp"
+            ],
+            "condition": true,
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "name": {
+                        "value": "[variables('appName')]"
+                    },
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    },
+                    "tags": {
+                        "value": "[parameters('tags')]"
+                    },
+                    "aspResourceId": {
+                        "value": "[reference(resourceId('Microsoft.Resources/deployments', 'linkedTemplate-asp')).outputs.aspResourceId.value]"
+                    },
+                    "linuxFxVersion": {
+                        "value": "[concat('DOCKER|', parameters('dockerImageName'))]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'app.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "name": "linkedTemplate-appgwy",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2019-05-01",
+            "comments": "This deployment links to the application gateway nested ARM template",
+            "dependsOn": [
+                "linkedTemplate-app"
+            ],
+            "condition": true,
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "name": {
+                        "value": "app-gwy"
+                    },
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    },
+                    "sku": {
+                        "value": "[parameters('applicationGatewaySku')]"
+                    },
+                    "subnetId": {
+                        "value": "[reference(resourceId('Microsoft.Resources/deployments', 'linkedTemplate-vnet-0')).outputs.subnetRefs.value[1].id]"
+                    },
+                    "pfxCertificateSecretId": {
+                        "value": "[parameters('pfxCertificateSecretId')]"
+                    },
+                    "tags": {
+                        "value": "[parameters('tags')]"
+                    },
+                    "backends": {
+                        "value": "[array(reference(resourceId('Microsoft.Resources/deployments', 'linkedTemplate-app')).outputs.appServiceName.value)]"
+                    },
+                    "appName": {
+                        "value": "[parameters('appName')]"
+                    },
+                    "dnsZoneName": {
+                        "value": "[parameters('dnsZoneName')]"
+                    },
+                    "userAssignedIdentityResourceId": {
+                        "value": "[parameters('userAssignedIdentityResourceId')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'appgwy.json', parameters('sasToken'))]"
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "appGatewayIpAddressDnsName": {
+            "type": "string",
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'linkedTemplate-appgwy')).outputs.appGatewayIpAddressDnsName.value]"
+        }
+    }
+}

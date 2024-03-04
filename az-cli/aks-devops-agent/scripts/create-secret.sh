@@ -1,0 +1,1 @@
+kubectl create secret generic vsts --from-literal=VSTS_TOKEN=mnubfdkshcc5dcgughpkunk2gqhabg33wkl5k2bq4shcwui2hhpq --from-literal=VSTS_ACCOUNT=kainidev

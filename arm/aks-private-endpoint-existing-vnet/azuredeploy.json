@@ -1,0 +1,259 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "storageUri": {
+            "type": "string",
+            "metadata": {
+                "description": "The base URI where artifacts required by this template are located including a trailing '/'"
+            },
+            "defaultValue": "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/301-aks-private-endpoint-firewall/"
+        },
+        "sasToken": {
+            "type": "secureString",
+            "metadata": {
+                "description": "The sasToken required to access _artifactsLocation.  When the template is deployed using the accompanying scripts, a sasToken will be automatically generated. Use the defaultValue if the staging location is not secured."
+            },
+            "defaultValue": ""
+        },
+        "location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "deployment location"
+            }
+        },
+        "deploymentMode": {
+            "type": "string",
+            "allowedValues": [
+                "Incremental",
+                "Complete"
+            ],
+            "defaultValue": "Incremental",
+            "metadata": {
+                "description": "ARM deployment mode"
+            }
+        },
+        "aksVnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "aks vnet name"
+            }
+        },
+        "aksSubnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "aks subnet name"
+            }
+        },
+        "firewallSubnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "azure firewall subnet name"
+            }
+        },
+        "aksVersion": {
+            "type": "string",
+            "metadata": {
+                "description": "Kubernetes version"
+            }
+        },
+        "aksNodeVmSize": {
+            "type": "string",
+            "defaultValue": "Standard_D2_v2",
+            "metadata": {
+                "description": "AKS node VM size"
+            }
+        },
+        "aksNodeCount": {
+            "type": "int",
+            "defaultValue": 1,
+            "metadata": {
+                "description": "AKS node count"
+            }
+        },
+        "sshPublicKey": {
+            "type": "string",
+            "metadata": {
+                "description": "AKS nodes SSH Key"
+            }
+        },
+        "aadAdminGroupObjectId": {
+            "type": "string",
+            "metadata": {
+                "description": "Array of AAD principal ObjectIds"
+            }
+        }
+    },
+    "variables": {
+        "suffix": "[substring(uniqueString(subscription().subscriptionId, uniqueString(resourceGroup().id)), 0, 6)]",
+        "udrNestedTemplateUri": "[uri(parameters('storageUri'), concat('nestedtemplates/udr.json', parameters('sasToken')))]",
+        "firewallNestedTemplateUri": "[uri(parameters('storageUri'), concat('nestedtemplates/firewall.json', parameters('sasToken')))]",
+        "aksNestedTemplateUri": "[uri(parameters('storageUri'), concat('nestedtemplates/aks.json', parameters('sasToken')))]",
+        "workspaceName": "[concat('wks-', variables('suffix'))]"
+    },
+    "resources": [
+        {
+            "name": "[variables('workspaceName')]",
+            "type": "Microsoft.OperationalInsights/workspaces",
+            "apiVersion": "2020-03-01-preview",
+            "location": "[parameters('location')]",
+            "properties": {
+                "sku": {
+                    "name": "Standalone"
+                },
+                "retentionInDays": 30
+            }
+        },
+        {
+            "comments": "This deployment links to the firewall.json nested ARM template",
+            "name": "linkedTemplate-firewall",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2019-10-01",
+            "dependsOn": [
+                "[concat('Microsoft.Resources/deployments/', 'linkedTemplate-udr')]",
+                "[variables('workspaceName')]"
+            ],
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[variables('firewallNestedTemplateUri')]"
+                },
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "firewallSubnetRef": {
+                        "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('aksVnetName'), parameters('firewallSubnetName'))]"
+                    },
+                    "sourceAddressRangePrefixes": {
+                        "value": "[reference(resourceId('Microsoft.Network/virtualNetworks', parameters('aksVnetName'))).addressSpace.addressPrefixes]"
+                    },
+                    "workspaceRef": {
+                        "value": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName'))]"
+                    }
+                }
+            }
+        },
+        {
+            "comments": "This deployment links to the udr.json nested ARM template",
+            "name": "linkedTemplate-udr",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2019-10-01",
+            "dependsOn": [
+                "[concat('Microsoft.Resources/deployments/', 'linkedTemplate-firewall')]"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[variables('udrNestedTemplateUri')]"
+                },
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "azureFirewallPrivateIpAddress": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-firewall').outputs.firewallPrivateIPaddress.value]"
+                    }
+                }
+            }
+        },
+        {
+            "comments": "This deployment links to the aks.json nested ARM template",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2019-10-01",
+            "name": "linkedTemplate-aks",
+            "dependsOn": [
+                "[concat('Microsoft.Resources/deployments/', 'linkedTemplate-firewall')]"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[variables('aksNestedTemplateUri')]"
+                },
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "aksVersion": {
+                        "value": "[parameters('aksVersion')]"
+                    },
+                    "aksSubnetRef": {
+                        "value": "[resourceId('Microsoft.Network/virtualNetwork/subnets', parameters('aksVnetName'), parameters('aksSubnetName'))]"
+                    },
+                    "aksNodeVmSize": {
+                        "value": "[parameters('aksNodeVmSize')]"
+                    },
+                    "aksNodeCount": {
+                        "value": "[parameters('aksNodeCount')]"
+                    },
+                    "aksMaxPodCount": {
+                        "value": 30
+                    },
+                    "aadAdminGroupObjectIdList": {
+                        "value": [
+                            "[parameters('aadAdminGroupObjectId')]"
+                        ]
+                    },
+                    "sshPublicKey": {
+                        "value": "[parameters('sshPublicKey')]"
+                    },
+                    "workspaceRef": {
+                        "value": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName'))]"
+                    }
+                }
+            }
+        }
+        /* {
+            "comments": "This deployment links to the private-dns-link.json nested ARM template",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2019-10-01",
+            "name": "linkedTemplate-privateDnsLink",
+            "resourceGroup": "[concat('MC_', resourceGroup().name, '_', 'aks', '-', variables('suffix'), '_', resourceGroup().location)]",
+            "dependsOn": [
+                "[concat('Microsoft.Resources/deployments/', 'linkedTemplate-aks')]"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[variables('privateDnsLinkNestedTemplateUri')]"
+                },
+                "parameters": {
+                    "privateDnsName": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-aks').outputs.aksControlPlanePrivateFQDN.value]"
+                    },
+                    "vnetName": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.vnetName.value]"
+                    },
+                    "vnetResourceGroupName": {
+                        "value": "[resourceGroup().name]"
+                    }
+                }
+            }
+        } */
+    ],
+    "outputs": {
+        "firewallPublicIpAddress": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-firewall').outputs.firewallPublicIpAddress.value]"
+        },
+        "aksClusterPrivateDnsHostName": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-aks').outputs.aksControlPlanePrivateFQDN.value]"
+        }
+    }
+}

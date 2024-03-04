@@ -1,0 +1,47 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"prefix": {
+			"value": "app-svc"
+		},
+		"pfxCertificate": {
+			"value": null
+		},
+		"adminUserObjectId": {
+			"value": "57963f10-818b-406d-a2f6-6e758d86e259"
+		},
+		"containerPort": {
+			"value": "80"
+		},
+		"containerImageName": {
+			"value": "belstarr/blockchainapi:latest"
+		},
+		"dnsZoneName": {
+			"value": "kainiindustries.net"
+		},
+		"hostName": {
+			"value": "gowebapp"
+		},
+		"appServicePlanSku": {
+			"value": "P1V2"
+		},
+		"vnetAddressPrefix": {
+			"value": "10.0.0.0/16"
+		},
+		"subnets": {
+			"value": [
+				{
+					"name": "ApplicationGatewaySubnet",
+					"addressPrefix": "10.0.0.0/24",
+					"serviceEndpoint": "Microsoft.Web"
+				},
+				{
+					"name": "VirtualMachineSubnet",
+					"addressPrefix": "10.0.1.0/24",
+					"serviceEndpoint": "Microsoft.Web"
+				}
+			]
+		}
+	}
+}

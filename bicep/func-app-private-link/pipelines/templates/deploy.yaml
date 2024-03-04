@@ -1,0 +1,40 @@
+parameters:
+  - name: azureSubscription
+    type: string
+  - name: resourceGroupName
+    type: string
+  - name: appName
+    type: string
+  - name: functionAppName
+    type: string
+  - name: environmentName
+    type: string
+
+jobs:
+- deployment: deploy
+  displayName: "Deploy Todo API to ${{ parameters.environmentName }}"
+  environment: "${{ parameters.environmentName }}-${{ parameters.appName }}"
+  workspace:
+    clean: all
+  timeoutInMinutes: 10
+  cancelTimeoutInMinutes: 15
+  pool:
+    vmImage: 'ubuntu-latest'
+  strategy:
+    runOnce:
+      deploy:
+        steps: 
+          - task: DownloadBuildArtifacts@1
+            displayName: 'copy build artifacts'
+            inputs:
+              artifactName: 'function'
+              buildVersionToDownload: latest
+
+          - task: AzureFunctionApp@1
+            inputs:
+              azureSubscription: ${{ parameters.azureSubscription }}
+              resourceGroupName: ${{ parameters.resourceGroupName }}
+              appType: functionAppLinux
+              appName: ${{ parameters.functionAppName }}
+              package: $(System.ArtifactsDirectory)/**/*.zip
+      

@@ -1,0 +1,137 @@
+trigger:
+  branches:
+    include:
+    - main
+    - develop
+  paths:
+    include:
+    - terraform/aks-private-endpoint/terraform/*
+    exclude:
+    - terraform/aks-private-endpoint/azure-pipelines.yml
+
+variables:
+  - name: ADO_SERVICE_CONNECTION_NAME
+    value: 'azure-airs-managed-identity'
+  - name: TF_PATH
+    value: ./terraform/aks-private-endpoint/terraform
+  - name: subscriptionId
+    value: 'b2375b5f-8dab-4436-b87c-32bc7fdce5d0'
+  - name: clientId
+    value: '1fdce3bf-c97b-4544-9633-17325e3c0254'
+  - name: tenantId
+    value: '3d49be6f-6e38-404b-bbd4-f61c1a2d25bf'
+  - name: useMsi 
+    value: true
+
+stages:
+- stage: dev_ci
+  displayName: 'Continuous Integration'
+  pool: 
+    name: my-vmss-agent-pool-01
+  jobs:
+  - job:
+    steps:
+      - checkout: self                  
+      - task: Bash@3
+        enabled: true
+        displayName: 'Dev Terraform init'
+        name: 'terraform_init'
+        env:
+          ARM_USE_MSI: $(useMsi)
+          ARM_CLIENT_ID: $(clientId)
+          ARM_TENANT_ID: $(tenantId)
+          ARM_SUBSCRIPTION_ID: $(subscriptionId)
+        inputs:
+          targetType: inline
+          workingDirectory: $(TF_PATH)
+          failOnStderr: true
+          bashEnvValue: 
+          script: |
+            terraform init -backend-config=dev.backend.conf
+      - task: Bash@3
+        enabled: true
+        displayName: 'Dev Terraform validate'
+        name: 'terraform_validate'
+        env:
+          ARM_USE_MSI: $(useMsi)
+          ARM_CLIENT_ID: $(clientId)
+          ARM_TENANT_ID: $(tenantId)
+          ARM_SUBSCRIPTION_ID: $(subscriptionId)
+        inputs:
+          targetType: inline
+          workingDirectory: $(TF_PATH)
+          failOnStderr: true
+          script: |
+            terraform validate
+      - task: Bash@3
+        enabled: true
+        displayName: 'Dev Terraform plan'
+        name: 'terraform_plan'
+        env:
+          ARM_USE_MSI: $(useMsi)
+          ARM_CLIENT_ID: $(clientId)
+          ARM_TENANT_ID: $(tenantId)
+          ARM_SUBSCRIPTION_ID: $(subscriptionId)
+        inputs:
+          targetType: inline
+          workingDirectory: $(TF_PATH)
+          failOnStderr: true
+          script: |
+            terraform plan -out=dev.tf.plan -var-file=dev.tfvars
+      - task: Bash@3
+        enabled:  true
+        displayName: 'Dev tfsec scan'
+        name: 'tfsec_scan'
+        inputs:
+          targetType: inline
+          failOnStderr: true
+          workingDirectory: $(TF_PATH)
+          script: |
+            tfsec -e azure-container-configured-network-policy --tfvars-file dev.tfvars
+
+- stage: dev_deployment
+  displayName: 'Dev deployment'
+  jobs:
+  - deployment: deploy_aks_infra
+    displayName: 'deploy Dev AKS infrastructure'
+    pool:
+      name: my-vmss-agent-pool-01
+    environment: dev-aks-private
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self     
+          - task: Bash@3
+            enabled: true
+            displayName: 'Test Terraform init'
+            name: 'terraform_init'
+            env:
+              ARM_USE_MSI: $(useMsi)
+              ARM_CLIENT_ID: $(clientId)
+              ARM_TENANT_ID: $(tenantId)
+              ARM_SUBSCRIPTION_ID: $(subscriptionId)
+            inputs:
+              targetType: inline
+              workingDirectory: $(TF_PATH)
+              failOnStderr: true
+              bashEnvValue: 
+              script: |
+                terraform init -backend-config=dev.backend.conf             
+          - task: Bash@3
+            enabled: true
+            displayName: 'Dev Terraform apply'
+            name: 'terraform_apply'
+            env:
+              ARM_USE_MSI: $(useMsi)
+              ARM_CLIENT_ID: $(clientId)
+              ARM_TENANT_ID: $(tenantId)
+              ARM_SUBSCRIPTION_ID: $(subscriptionId)
+            inputs:
+              targetType: inline
+              workingDirectory: $(TF_PATH)
+              failOnStderr: true
+              script: |
+                terraform apply -state=dev.tf.plan -auto-approve -var-file=dev.tfvars
+
+

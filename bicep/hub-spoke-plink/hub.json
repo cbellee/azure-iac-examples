@@ -1,0 +1,237 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.3.255.40792",
+      "templateHash": "14481916367317931001"
+    }
+  },
+  "parameters": {
+    "hubVnetName": {
+      "type": "string",
+      "defaultValue": "hub-vnet"
+    },
+    "hubVnetAddressPrefix": {
+      "type": "string",
+      "defaultValue": "10.0.0.0/16"
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "costcentre": "1234567890",
+        "environment": "dev"
+      }
+    },
+    "hubSubnets": {
+      "type": "array",
+      "defaultValue": [
+        {
+          "name": "PrivateLink-Subnet",
+          "addressPrefix": "10.0.0.0/24",
+          "delegations": []
+        },
+        {
+          "name": "NetApp-Subnet",
+          "addressPrefix": "10.0.1.0/24",
+          "delegations": []
+        }
+      ]
+    }
+  },
+  "functions": [],
+  "variables": {
+    "suffix": "[uniqueString(resourceGroup().id)]",
+    "acrName": "[format('acr{0}', variables('suffix'))]",
+    "acrPrivateDNSZoneName": "privatelink.azurecr.io"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ContainerRegistry/registries",
+      "apiVersion": "2020-11-01-preview",
+      "name": "[variables('acrName')]",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "Premium"
+      },
+      "properties": {
+        "adminUserEnabled": true,
+        "publicNetworkAccess": "Disabled",
+        "networkRuleSet": {
+          "defaultAction": "Deny"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2020-11-01",
+      "name": "acrPrivateEndpoint",
+      "location": "[resourceGroup().location]",
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', reference(resourceId('Microsoft.Resources/deployments', parameters('hubVnetName')), '2019-10-01').outputs.vnetName.value, reference(resourceId('Microsoft.Resources/deployments', parameters('hubVnetName')), '2019-10-01').outputs.subnetArray.value[0].name)]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "acrConnection",
+            "properties": {
+              "groupIds": [
+                "registry"
+              ],
+              "privateLinkServiceId": "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]",
+        "[resourceId('Microsoft.Resources/deployments', parameters('hubVnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "[variables('acrPrivateDNSZoneName')]",
+      "location": "global",
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}-link', variables('acrPrivateDNSZoneName'), variables('acrPrivateDNSZoneName'))]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[reference(resourceId('Microsoft.Resources/deployments', parameters('hubVnetName')), '2019-10-01').outputs.id.value]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', variables('acrPrivateDNSZoneName'))]",
+        "[resourceId('Microsoft.Resources/deployments', parameters('hubVnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-10-01",
+      "name": "[parameters('hubVnetName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "vnetName": {
+            "value": "[parameters('hubVnetName')]"
+          },
+          "subnets": {
+            "value": "[parameters('hubSubnets')]"
+          },
+          "vnetAddressPrefix": {
+            "value": "[parameters('hubVnetAddressPrefix')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.3.255.40792",
+              "templateHash": "16185097628804106595"
+            }
+          },
+          "parameters": {
+            "vnetName": {
+              "type": "string"
+            },
+            "vnetAddressPrefix": {
+              "type": "string"
+            },
+            "subnets": {
+              "type": "array"
+            },
+            "tags": {
+              "type": "object"
+            }
+          },
+          "functions": [],
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2020-06-01",
+              "name": "[parameters('vnetName')]",
+              "tags": "[parameters('tags')]",
+              "location": "[resourceGroup().location]",
+              "properties": {
+                "copy": [
+                  {
+                    "name": "subnets",
+                    "count": "[length(parameters('subnets'))]",
+                    "input": {
+                      "name": "[parameters('subnets')[copyIndex('subnets')].name]",
+                      "properties": {
+                        "addressPrefix": "[parameters('subnets')[copyIndex('subnets')].addressPrefix]",
+                        "privateEndpointNetworkPolicies": "Disabled",
+                        "delegations": "[if(equals(parameters('subnets')[copyIndex('subnets')].delegations, createArray()), null(), parameters('subnets')[copyIndex('subnets')].delegations)]"
+                      }
+                    }
+                  }
+                ],
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "[parameters('vnetAddressPrefix')]"
+                  ]
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]"
+            },
+            "subnetArray": {
+              "type": "array",
+              "value": "[reference(resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))).subnets]"
+            },
+            "vnetName": {
+              "type": "string",
+              "value": "[parameters('vnetName')]"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "vnetName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', parameters('hubVnetName')), '2019-10-01').outputs.vnetName.value]"
+    },
+    "vnetId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', parameters('hubVnetName')), '2019-10-01').outputs.id.value]"
+    },
+    "dnsZoneId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/privateDnsZones', variables('acrPrivateDNSZoneName'))]"
+    },
+    "acrLoginServer": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))).loginServer]"
+    },
+    "acrPassword": {
+      "type": "string",
+      "value": "[listCredentials(resourceId('Microsoft.ContainerRegistry/registries', variables('acrName')), '2020-11-01-preview').passwords[0].value]"
+    },
+    "acrName": {
+      "type": "string",
+      "value": "[variables('acrName')]"
+    }
+  }
+}

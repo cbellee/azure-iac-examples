@@ -1,0 +1,60 @@
+resources:
+  repositories:
+  - repository: ag-apim-aks-simplified-repo
+    type: github
+    endpoint: cbellee
+    name: cbellee/azure-iac-examples
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ./bicep/ag-apim-aks-simplified/infra/*
+pool:
+  vmImage: 'ubuntu-latest'
+  poolName: 'Azure Pipelines'
+
+variables:
+  - name: location
+    value: 'australiaeast'
+  - name: azureConnection
+    value: 'internal_azure_subscription'
+  - name : acrName
+    value: ''
+  - name: resourceGroup
+    value: 'ag-apim-aks'
+  - name: aadTenant
+    value: 'kainiindustries.net'
+  - name: publicDnsZone
+    value: 'kainiindustries.net'
+  - name: orderApiSvcIp
+    value: '10.2.2.4'
+  - name: productApiSvcIp
+    value: '10.2.2.5'
+  - name: reactAppSvcIp
+    value: '10.2.2.6'
+  - group: devVariableGroup
+  - group: testVariableGroup
+  - group: prodVariableGroup
+
+stages:
+  - template: app-build.yaml
+    parameters:
+      location: $(location)
+      acrName: $(acrName)
+      vmImage: $(vmImage)
+      resourceGroup: $(resourceGroup)
+      poolName: $(poolName)
+  - template: app-release.yaml
+    parameters:
+      location: $(location)
+      acrName: $(acrName)
+      vmImage: $(vmImage)
+      resourceGroup: $(resourceGroup)
+      poolName: $(poolName)
+      aadTenant: $(aadTenant)
+      publicDnsZone: $(publicDnsZone)
+      orderApiSvcIp: $(orderApiSvcIp)
+      productApiSvcIp: $(productApiSvcIp)
+      reactAppSvcIp: $(reactAppSvcIp)

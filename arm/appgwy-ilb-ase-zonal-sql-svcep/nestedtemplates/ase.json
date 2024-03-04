@@ -1,0 +1,149 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"suffix": {
+			"type": "string"
+		},
+		"subnetName": {
+			"type": "string"
+		},
+		"vnetId": {
+			"type": "string"
+		},
+		"aseZone": {
+			"type": "string"
+		},
+		"loadBalancingMode": {
+			"type": "int",
+			"defaultValue": 3,
+			"allowedValues": [
+				0,
+				1,
+				2,
+				3
+			],
+			"metadata": {
+				"description": "0 = public VIP only, 1 = only ports 80/443 are mapped to ILB VIP, 2 = only FTP ports are mapped to ILB VIP, 3 = both ports 80/443 and FTP ports are mapped to an ILB VIP."
+			}
+		},
+		"sku": {
+			"type": "string",
+			"defaultValue": "Isolated"
+		},
+		"skuCode": {
+			"type": "string",
+			"defaultValue": "I1"
+		},
+		"workerSize": {
+			"type": "string",
+			"defaultValue": "0"
+		},
+		"workerSizeId": {
+			"type": "string",
+			"defaultValue": "0"
+		},
+		"numberOfWorkers": {
+			"type": "string",
+			"defaultValue": "1",
+			"metadata": {
+				"description": "Defines the number of workers from the worker pool that will be used by the app service plan."
+			}
+		},
+		"siteName": {
+			"type": "string"
+		}
+	},
+	"variables": {
+		"aseName": "[concat('ase', '-', parameters('aseZone'), '-', parameters('suffix'))]",
+		"aspName": "[concat('asp', '-', parameters('aseZone'), '-', parameters('suffix'))]"
+	},
+	"resources": [
+		{
+			"apiVersion": "2016-09-01",
+			"type": "Microsoft.Web/hostingEnvironments",
+			"name": "[variables('aseName')]",
+			"kind": "ASEV2",
+			"location": "[resourceGroup().location]",
+			"zones": [
+				"[parameters('aseZone')]"
+			],
+			"properties": {
+				"internalLoadBalancingMode": "[parameters('loadBalancingMode')]",
+				"name": "[variables('aseName')]",
+				"location": "[resourceGroup().location]",
+				"virtualNetwork": {
+					"id": "[parameters('vnetId')]",
+					"subnet": "[parameters('subnetName')]"
+				}
+			}
+		},
+		{
+			"apiVersion": "2018-11-01",
+			"name": "[tolower(variables('aspName'))]",
+			"type": "Microsoft.Web/serverfarms",
+			"location": "[resourceGroup().location]",
+			"dependsOn": [
+				"[resourceId('Microsoft.Web/hostingEnvironments', variables('aseName'))]"
+			],
+			"kind": "linux",
+			"tags": {},
+			"properties": {
+				"name": "[tolower(variables('aspName'))]",
+				"workerSize": "[parameters('workerSize')]",
+				"workerSizeId": "[parameters('workerSizeId')]",
+				"numberOfWorkers": "[parameters('numberOfWorkers')]",
+				"reserved": true,
+				"hostingEnvironmentProfile": {
+					"id": "[resourceId('Microsoft.Web/hostingEnvironments', variables('aseName'))]"
+				}
+			},
+			"sku": {
+				"Tier": "[parameters('sku')]",
+				"Name": "[parameters('skuCode')]"
+			}
+		},
+		{
+			"apiVersion": "2020-06-01",
+			"name": "[parameters('siteName')]",
+			"type": "Microsoft.Web/sites",
+			"location": "[resourceGroup().location]",
+			"dependsOn": [
+				"[resourceId('Microsoft.Web/serverFarms', variables('aspName'))]"
+			],
+			"properties": {
+				"name": "[parameters('siteName')]",
+				"serverFarmId": "[resourceId('Microsoft.Web/serverFarms', variables('aspName'))]",
+				"hostingEnvironmentProfile": {
+					"id": "[resourceId('Microsoft.Web/hostingEnvironments', variables('aseName'))]"
+				}
+			}
+		}
+	],
+	"outputs": {
+		"aseName": {
+			"type": "string",
+			"value": "[variables('aseName')]"
+		},
+		"aseHostingEnvironmentId": {
+			"type": "string",
+			"value": "[resourceId('Microsoft.Web/hostingEnvironments', variables('aseName'))]"
+		},
+		"siteFqdn": {
+			"type": "string",
+			"value": "[concat(parameters('siteName'), '.', variables('aseName'), '.', 'appserviceenvironment.net')]"
+		},
+		"aseFqdn": {
+			"type": "string",
+			"value": "[concat(variables('aseName'), '.', 'appserviceenvironment.net')]"
+		},
+		"siteName": {
+			"type": "string",
+			"value": "[parameters('siteName')]"
+		},
+		"aseVnetId": {
+			"type": "string",
+			"value": "[parameters('vnetId')]"
+		}
+	}
+}

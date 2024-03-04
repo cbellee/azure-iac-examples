@@ -1,0 +1,33 @@
+trigger:
+  branches:
+    include:
+    - main
+    - develop
+  paths:
+    include:
+    - terraform/tf-layering/terraform/*
+    exclude:
+    - terraform/tf-layering/pipelines/*
+
+variables:
+  - group: 'tf-layering-creds'
+  - name: tfPath
+    value: ./terraform/tf-layering/infra/30-application
+  - name: subscriptionId
+    value: 'b2375b5f-8dab-4436-b87c-32bc7fdce5d0'
+  - name: tenantId
+    value: '3d49be6f-6e38-404b-bbd4-f61c1a2d25bf'
+
+stages:
+- stage: 'infra_deployment'
+  displayName: 'Infrastructure Deployment'
+  jobs:
+  - template: template.yaml
+    parameters:
+      clientId: $(appClientId)
+      clientSecret: $(appSecret)
+      subscriptionId: ${{ variables.subscriptionId }}
+      tenantId: ${{ variables.tenantId }}
+      tfPath: ${{ variables.tfPath }}
+
+ 

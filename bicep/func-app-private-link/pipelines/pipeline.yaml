@@ -1,0 +1,22 @@
+trigger:
+- main
+
+name: 'func app private link deployment'
+
+variables:
+  azureSubscription: 'Azure CXP FTA Internal Subscription CBELLEE (b2375b5f-8dab-4436-b87c-32bc7fdce5d0)'
+  location: 'australiaeast'
+  resourceGroupName: "func-app-plink-${{ variables.location }}-rg"
+
+stages:
+- template: templates/build.yaml
+
+- stage: 'dev_infra'
+  displayName: 'Deploy Dev Infra'
+  jobs:
+    - template: templates/infra.yaml
+      parameters:
+        azureSubscription: ${{ variables.azureSubscription }}
+        resourceGroupName: ${{ variables.resourceGroupName }}
+        environmentName: dev
+

@@ -1,0 +1,6 @@
+package: spec
+output: ./product/spec/spec.gen.go
+generate:
+  echo-server: true
+  embedded-spec: true
+  models: true

@@ -1,0 +1,89 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "name": {
+            "type": "string"
+        },
+        "suffix": {
+            "type": "string"
+        },
+        "kind": {
+            "type": "string",
+            "defaultValue": "app,linux,container"
+        },
+        "aspResourceId": {
+            "type": "string"
+        },
+        "linuxFxVersion": {
+            "type": "string"
+        },
+        "subnetId": {
+            "type": "string"
+        },
+        "containerCmdLine": {
+            "type": "string",
+            "defaultValue": ""
+        },
+        "tags": {
+            "type": "object"
+        },
+        "appServiceNames": {
+            "type": "array"
+        }
+    },
+    "variables": {
+        "appName": "[concat(parameters('name'), '-', parameters('suffix'))]"
+    },
+    "resources": [
+        {
+            "name": "[variables('appName')]",
+            "type": "Microsoft.Web/sites",
+            "apiVersion": "2018-11-01",
+            "location": "[resourceGroup().location]",
+            "tags": "[parameters('tags')]",
+            "kind": "[parameters('kind')]",
+            "properties": {
+                "serverFarmId": "[parameters('aspResourceId')]",
+                "reserved": true,
+                "containerSize": 0,
+                "dailyMemoryTimeQuota": 0,
+                "httpsOnly": false
+            }
+        },
+        {
+            "name": "[concat(variables('appName'), '/web')]",
+            "type": "Microsoft.Web/sites/config",
+            "apiVersion": "2018-11-01",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[variables('appName')]"
+            ],
+            "properties": {
+                "numberOfWorkers": 1,
+                "linuxFxVersion": "[parameters('linuxFxVersion')]",
+                "appCommandLine": "[parameters('containerCmdLine')]"
+            }
+        },
+        {
+            "name": "[concat(variables('appName'), '/virtualNetwork')]",
+            "type": "Microsoft.Web/sites/config",
+            "apiVersion": "2018-02-01",
+            "condition": false,
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[variables('appName')]"
+            ],
+            "properties": {
+                "subnetResourceId": "[parameters('subnetId')]",
+                "swiftSupported": true
+            }
+        }
+    ],
+    "outputs": {
+        "appServiceNames": {
+            "type": "array",
+            "value": "[concat(parameters('appServiceNames'), array(json(concat('{\"hostName\":\"', variables('appName'), '\",', '\"name\":\"', parameters('name'), '\"}'))))]"
+        }
+    }
+}

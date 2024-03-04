@@ -1,0 +1,9 @@
+[{
+    "allowedMemberTypes": [
+      "Application"
+    ],
+    "description": "Todo.User can call all endpoints in the api",
+    "displayName": "Todo.User",
+    "isEnabled": "true",
+    "value": "todo.user"
+}]

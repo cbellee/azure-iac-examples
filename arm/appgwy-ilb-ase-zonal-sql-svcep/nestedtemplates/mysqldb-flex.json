@@ -1,0 +1,130 @@
+{
+	"$schema": "http://schema.management.azure.com/schemas/2014-04-01-preview/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"administratorLogin": {
+			"type": "string"
+		},
+		"administratorLoginPassword": {
+			"type": "securestring"
+		},
+		"location": {
+			"type": "string"
+		},
+		"serverName": {
+			"type": "string"
+		},
+		"serverEdition": {
+			"type": "string",
+			"defaultValue": "GeneralPurpose"
+		},
+		"vCores": {
+			"type": "int",
+			"defaultValue": 4
+		},
+		"storageSizeMB": {
+			"type": "int",
+			"defaultValue": 51200
+		},
+		"haEnabled": {
+			"type": "string",
+			"defaultValue": "Enabled"
+		},
+		"version": {
+			"type": "string",
+			"defaultValue": "5.7"
+		},
+		"tags": {
+			"type": "object",
+			"defaultValue": {}
+		},
+		"firewallRules": {
+			"type": "object",
+			"defaultValue": {}
+		},
+		"vnetData": {
+			"type": "object",
+			"defaultValue": {
+				"rules": []
+			}
+		},
+		"backupRetentionDays": {
+			"type": "int",
+			"defaultValue": 7
+		},
+		"geoRedundantBackup": {
+			"type": "string",
+			"defaultValue": "Enabled"
+		},
+		"vmName": {
+			"type": "string",
+			"defaultValue": "GP_D4s_v3"
+		}
+	},
+	"variables": {
+		"api": "2020-07-01-privatepreview",
+		"firewallRules": "[parameters('firewallRules').rules]",
+		"publicNetworkAccess": "[if(empty(parameters('vnetData')), 'Enabled', 'Disabled')]",
+		"vnetDataSet": "[if(empty(parameters('vnetData')), json('{ \"subnetArmResourceId\": \"\" }'), parameters('vnetData'))]",
+		"finalVnetData": "[json(concat('{ \"SubnetArmResourceId\": \"', variables('vnetDataSet').subnetArmResourceId, '\"}'))]"
+	},
+	"resources": [
+		{
+			"apiVersion": "[variables('api')]",
+			"location": "[parameters('location')]",
+			"name": "[parameters('serverName')]",
+			"properties": {
+				"version": "[parameters('version')]",
+				"administratorLogin": "[parameters('administratorLogin')]",
+				"administratorLoginPassword": "[parameters('administratorLoginPassword')]",
+				"publicNetworkAccess": "[variables('publicNetworkAccess')]",
+				"DelegatedSubnetArguments": "[if(empty(parameters('vnetData')), json('null'), variables('finalVnetData'))]",
+				"haEnabled": "[parameters('haEnabled')]",
+				"storageProfile": {
+					"storageMB": "[parameters('storageSizeMB')]",
+					"backupRetentionDays": "[parameters('backupRetentionDays')]",
+					"geoRedundantBackup": "[parameters('geoRedundantBackup')]"
+				}
+			},
+			"sku": {
+				"name": "[parameters('vmName')]",
+				"tier": "[parameters('serverEdition')]",
+				"capacity": "[parameters('vCores')]"
+			},
+			"tags": "[parameters('tags')]",
+			"type": "Microsoft.DBforMySQL/flexibleServers"
+		},
+		{
+			"condition": "[greater(length(variables('firewallRules')), 0)]",
+			"type": "Microsoft.Resources/deployments",
+			"apiVersion": "2019-08-01",
+			"name": "[concat('firewallRules-', copyIndex())]",
+			"copy": {
+				"count": "[if(greater(length(variables('firewallRules')), 0), length(variables('firewallRules')), 1)]",
+				"mode": "Serial",
+				"name": "firewallRulesIterator"
+			},
+			"dependsOn": [
+				"[concat('Microsoft.DBforMySQL/flexibleServers/', parameters('serverName'))]"
+			],
+			"properties": {
+				"mode": "Incremental",
+				"template": {
+					"$schema": "http://schema.management.azure.com/schemas/2014-04-01-preview/deploymentTemplate.json#",
+					"contentVersion": "1.0.0.0",
+					"resources": [
+						{
+							"type": "Microsoft.DBforMySQL/flexibleServers/firewallRules",
+							"name": "[concat(parameters('serverName'),'/',variables('firewallRules')[copyIndex()].name)]",
+							"apiVersion": "[variables('api')]",
+							"properties": {
+								"StartIpAddress": "[variables('firewallRules')[copyIndex()].startIPAddress]",
+								"EndIpAddress": "[variables('firewallRules')[copyIndex()].endIPAddress]"
+							}
+						}
+					]
+				}
+			}
+		}
+	]
+}

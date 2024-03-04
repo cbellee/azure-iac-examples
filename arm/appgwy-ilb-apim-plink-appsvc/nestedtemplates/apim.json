@@ -1,0 +1,105 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"suffix": {
+			"type": "string"
+		},
+		"apimSku": {
+			"type": "object",
+			"defaultValue": {
+				"name": "Developer",
+				"capacity": 1
+			}
+		},
+		"subnetId": {
+			"type": "string"
+		}
+/* 		"keyVaultName": {
+			"type": "string"
+		} */
+	},
+	"variables": {
+		"apiMgmtname": "[concat('api-mgmt-', parameters('suffix'))]"
+		//"apimServiceIdentityResourceId": "[concat(resourceId('Microsoft.ApiManagement/service', variables('apiMgmtname')),'/providers/Microsoft.ManagedIdentity/Identities/default')]"
+	},
+	"resources": [
+		{
+			"type": "Microsoft.ApiManagement/service",
+			"apiVersion": "2018-06-01-preview",
+			"name": "[variables('apiMgmtName')]",
+			"location": "[resourceGroup().location]",
+			"dependsOn": [
+			],
+			"sku": "[parameters('apimSku')]",
+			"identity": {
+				"type": "SystemAssigned"
+			},
+			"properties": {
+				"publisherEmail": "cbellee@microsoft.com",
+				"publisherName": "KainiIndustries",
+				"notificationSenderEmail": "apimgmt-noreply@mail.windowsazure.com",
+				"virtualNetworkConfiguration": {
+					"subnetResourceId": "[parameters('subnetId')]"
+				},
+				"customProperties": {
+					"Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10": "False",
+					"Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11": "False",
+					"Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30": "False",
+					"Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TripleDes168": "False",
+					"Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls10": "False",
+					"Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls11": "False",
+					"Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Ssl30": "False",
+					"Microsoft.WindowsAzure.ApiManagement.Gateway.Protocols.Server.Http2": "False"
+				},
+				"virtualNetworkType": "Internal"
+			}
+		}
+		/* {
+			"type": "Microsoft.KeyVault/vaults/accessPolicies",
+			"name": "[concat(parameters('keyVaultName'), '/add')]",
+			"apiVersion": "2016-10-01",
+			"dependsOn": [
+				"[resourceId('Microsoft.ApiManagement/service', variables('apiMgmtName'))]"
+			],
+			"properties": {
+				"accessPolicies": [
+					{
+						"tenantId": "[subscription().tenantId]",
+						"objectId": "[reference(variables('apimServiceIdentityResourceId'), '2015-08-31-PREVIEW', 'Full').properties.principalId]",
+						"permissions": {
+							"secrets": [
+								"get"
+							],
+							"certificates": [
+								"get"
+							]
+						}
+					}
+				]
+			}
+		} */
+	],
+	"outputs": {
+		"apimPrivateIpAddress": {
+			"type": "string",
+			"value": "[reference(variables('apiMgmtName')).privateIPAddresses[0]]"
+		},
+		"apimGatewayHostName": {
+			"type": "string",
+			"value": "[replace(reference(variables('apiMgmtName')).gatewayUrl, 'https://', '')]"
+		},
+		"apimPortalHostName": {
+			"type": "string",
+			"value": "[replace(reference(variables('apiMgmtName')).portalUrl, 'https://', '')]"
+		},
+		"apimScmDnsName": {
+			"type": "string",
+			"value": "[replace(reference(variables('apiMgmtName')).scmUrl, 'https://', '')]"
+		},
+		"apimMgmtDnsName": {
+			"type": "string",
+			"value": "[replace(reference(variables('apiMgmtName')).managementApiUrl, 'https://', '')]"
+		}
+	}
+}

@@ -1,0 +1,23 @@
+appgw:
+    subscriptionId: b2375b5f-8dab-4436-b87c-32bc7fdce5d0
+    resourceGroup: dev-k8s-agic-rg
+    name: appgwy-i4kh3a
+
+    # Setting appgw.shared to "true" will create an AzureIngressProhibitedTarget CRD.
+    # This prohibits AGIC from applying config for any host/path.
+    # Use "kubectl get AzureIngressProhibitedTargets" to view and change this.
+    shared: false
+
+armAuth:
+    type: aadPodIdentity
+    identityResourceID: /subscriptions/b2375b5f-8dab-4436-b87c-32bc7fdce5d0/resourceGroups/dev-k8s-agic-rg/providers/Microsoft.ManagedIdentity/userAssignedIdentities/appgwContrIdentity-i4kh3a
+    identityClientID: add9e566-452c-4c80-9d5f-5aa77b02ff73
+
+################################################################################
+# Specify if the cluster is RBAC enabled or not
+rbac:
+    enabled: true # true/false
+
+# Specify aks cluster related information. THIS IS BEING DEPRECATED.
+aksClusterConfiguration:
+    apiServerAddress: aks-363030f0.hcp.australiaeast.azmk8s.io:443

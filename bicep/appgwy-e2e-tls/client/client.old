@@ -1,0 +1,46 @@
+package main
+
+import (
+	"fmt"
+	"golang.org/x/net/context"
+	cc "golang.org/x/oauth2/clientcredentials"
+	"io/ioutil"
+	"net/http"
+	"os"
+)
+
+type SpecialClient struct {
+	*http.Client
+}
+
+	resp, err := client.Get("http://some.remote.resource/path/to/resource")
+
+	if err != nil {
+		panic(err)
+	}
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 200 {
+		fmt.Println("The request was successfull")
+		fmt.Println(string(body))
+	} else {
+		fmt.Println("Could not perform request to endpoint. Response below:")
+		fmt.Println(string(body))
+	}
+}
+
+func NewClient(cid, csec string) *SpecialClient {
+	config := &cc.Config{
+		ClientID:     cid,
+		ClientSecret: csec,
+		TokenURL:     "http://some.remote.resource/token",
+		Scopes:       []string{"scope:name"},
+	}
+
+	ctx := context.Background()
+	client := config.Client(ctx)
+
+	return &SpecialClient{client}
+}

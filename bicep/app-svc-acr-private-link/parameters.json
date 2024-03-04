@@ -1,0 +1,39 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "virtualNetwork": {
+            "value": {
+                "addressPrefixes": [
+                    "10.1.0.0/16"
+                ],
+                "subnets": [
+                    {
+                        "name": "PrivateLinkSubnet",
+                        "addressPrefix": "10.1.0.0/24",
+                        "udrName": null,
+                        "nsgName": null,
+                        "delegations": null,
+                        "privateEndpointNetworkPolicies": "Disabled"
+                    },
+                    {
+                        "name": "AppServiceIntegrationSubnet",
+                        "addressPrefix": "10.1.1.0/24",
+                        "udrName": null,
+                        "nsgName": null,
+                        "delegations": "Microsoft.Web/serverfarms",
+                        "privateEndpointNetworkPolicies": "Enabled"
+                    },
+                    {
+                        "name": "ContainerRegistrySubnet",
+                        "addressPrefix": "10.1.2.0/24",
+                        "udrName": null,
+                        "nsgName": null,
+                        "delegations": null,
+                        "privateEndpointNetworkPolicies": "Enabled"
+                    }
+                ]
+            }
+        }
+    }
+}

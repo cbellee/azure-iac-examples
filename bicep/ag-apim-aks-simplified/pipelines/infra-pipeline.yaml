@@ -1,0 +1,72 @@
+resources:
+  repositories:
+  - repository: ag-apim-aks-simplified-repo
+    type: github
+    endpoint: cbellee
+    name: cbellee/azure-iac-examples
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - ./bicep/ag-apim-aks-simplified/infra/*
+pool:
+  vmImage: 'windows-latest'
+  poolName: 'Azure Pipelines'
+
+variables:
+  - name: location
+    value: 'australiaeast'
+  - name: azureConnection
+    value: 'internal_azure_subscription'
+  - name: vmImage
+    value: 'windows-latest'
+  - name: poolName
+    value: 'Azure Pipelines'
+  - name: subscriptionId
+    value: 'b2375b5f-8dab-4436-b87c-32bc7fdce5d0'
+  - name: resourceGroupName
+    value: 'ag-apim-aks'
+  - name: aksAdminGroupObjectId
+    value: 'f6a900e2-df11-43e7-ba3e-22be99d3cede'
+  - name: publicDnsZone
+    value: 'kainiindustries.net'
+  - name: publicDnsZoneResourceGroup
+    value: 'external-dns-zones-rg'
+  - name: reactSpaSvcIp
+    value: '2.2.2.2'
+  - name: keyVaultName
+    value: 'ag-apim-aks-kv'
+  - name: keyVaultResourceGroupName
+    value: 'key-vault-rg'
+  - name: tlsCertSecretId
+    value: 'https://ag-apim-aks-kv.vault.azure.net/secrets/kainiindustries-wildcard-cert'
+  - name: gitRepoUrl
+    value: 'https://github.com/cbellee/appgwy-apim-aks-gitops.git'
+  - name: aksVersion
+    value: 1.23.12
+
+stages:
+  - template: infra-build.yaml
+    parameters:
+      vmImage: $(vmImage)
+      poolName: $(poolName)
+  - template: infra-release.yaml
+    parameters:
+      vmImage: $(vmImage)
+      poolName: $(poolName)
+      location: $(location)
+      environment: dev
+      azureConnection: $(azureConnection)
+      subscriptionId: $(subscriptionId)
+      resourceGroupName: $(resourceGroupName)
+      aksAdminGroupObjectId: $(aksAdminGroupObjectId)
+      publicDnsZone: $(publicDnsZone)
+      publicDnsZoneResourceGroup: $(publicDnsZoneResourceGroup)
+      reactSpaSvcIp: $(reactSpaSvcIp)
+      keyVaultName: $(keyVaultName)
+      tlsCertSecretId: $(tlsCertSecretId)
+      keyVaultResourceGroupName: $(keyVaultResourceGroupName)
+      gitRepoUrl: $(gitRepoUrl)
+      aksVersion: $(aksVersion)

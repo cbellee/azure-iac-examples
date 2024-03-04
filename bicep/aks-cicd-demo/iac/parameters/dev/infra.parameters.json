@@ -1,0 +1,102 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "environment": {
+            "value": "dev"
+        },
+        "location": {
+            "value": null
+        },
+        "tags": {
+            "value": {
+                "environment": "dev",
+                "costCenter": "123456789",
+                "dept": "it"
+            }
+        },
+        "aksAdminGroupObjectId": {
+            "value": "f6a900e2-df11-43e7-ba3e-22be99d3cede"
+        },
+        "vNets": {
+            "value": [
+                {
+                    "name": "hub-vnet",
+                    "addressPrefixes": [
+                        "10.1.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "AzureFirewallSubnet",
+                            "addressPrefix": "10.1.0.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Enabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "AzureBastionSubnet",
+                            "addressPrefix": "10.1.1.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Enabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "MgmtSubnet",
+                            "addressPrefix": "10.1.2.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Enabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        }
+                    ]
+                },
+                {
+                    "name": "spoke-vnet",
+                    "addressPrefixes": [
+                        "10.2.0.0/16"
+                    ],
+                    "subnets": [
+                        {
+                            "name": "AksSystemSubnet",
+                            "addressPrefix": "10.2.0.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "AksUserSubnet",
+                            "addressPrefix": "10.2.1.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        },
+                        {
+                            "name": "AksLoadBalancerSubnet",
+                            "addressPrefix": "10.2.2.0/24",
+                            "udrName": null,
+                            "nsgName": null,
+                            "privateEndpointNetworkPolicies": "Disabled",
+                            "privateLinkServiceNetworkPolicies": "Enabled",
+                            "serviceEndpoints": null,
+                            "delegations": null
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}

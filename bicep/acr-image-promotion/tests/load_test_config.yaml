@@ -1,0 +1,8 @@
+version: v0.1
+testName: TodoAPILoadTest
+testPlan: load_test.jmx
+description: Load test Todo API
+engineInstances: 1
+failureCriteria:
+  - avg(response_time_ms) > 300
+  - percentage(error) > 10

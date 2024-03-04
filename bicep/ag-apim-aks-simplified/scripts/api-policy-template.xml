@@ -1,0 +1,41 @@
+<policies>
+    <inbound>
+        <base />
+        <cors allow-credentials="true">
+            <allowed-origins>
+                <origin>https://{{APP_GWY_FQDN}}</origin>
+                <origin>http://localhost:3000</origin>
+            </allowed-origins>
+            <allowed-methods>
+                <method>GET</method>
+                <method>POST</method>
+                <method>PUT</method>
+                <method>DELETE</method>
+                <method>PATCH</method>
+                <method>OPTIONS</method>
+            </allowed-methods>
+        </cors>
+        <validate-jwt header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Access Denied">
+            <openid-config url="https://login.microsoftonline.com/{{TENANT_NAME}}/v2.0/.well-known/openid-configuration" />
+            <required-claims>
+                <claim name="aud">
+                    <value>{{AUDIENCE_API}}</value>
+                </claim>
+                 <claim name="roles" match="any">
+                    <value>{{READ_ROLE_NAME}}</value>
+                    <value>{{WRITE_ROLE_NAME}}</value>
+                </claim>
+            </required-claims>
+        </validate-jwt>
+        <set-backend-service base-url="{{SERVICE_URL}}" />
+    </inbound>
+    <backend>
+        <base />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

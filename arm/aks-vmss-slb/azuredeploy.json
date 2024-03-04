@@ -1,0 +1,122 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentMode": {
+            "type": "string",
+            "allowedValues": [
+                "Incremental",
+                "Complete"
+            ],
+            "defaultValue": "Incremental"
+        },
+        "storageUri": {
+            "type": "string"
+        },
+        "tags": {
+            "type": "object"
+        },
+        "vNets": {
+            "type": "array"
+        },
+        "sasToken": {
+            "type": "string"
+        },
+        "aksVersion": {
+            "type": "string"
+        },
+        "aksNodeCount": {
+            "type": "int",
+            "defaultValue": 3
+        },
+        "aksNodeVMSize": {
+            "type": "string",
+            "defaultValue": "Standard_D4s_v3"
+        },
+        "maxPods": {
+            "type": "int",
+            "defaultValue": 50
+        }
+    },
+    "variables": {
+        "resgpguid": "[substring(replace(guid(resourceGroup().id), '-', ''), 0, 6)]"
+    },
+    "resources": [
+        {
+            "name": "[concat('linkedTemplate-vnet', '-', copyIndex())]",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "comments": "This deployment links to the gatewayVpn nested ARM template",
+            "dependsOn": [],
+            "condition": true,
+            "resourceGroup": "[resourceGroup().name]",
+            "copy": {
+                "name": "vnetCopy",
+                "count": "[length(parameters('vNets'))]"
+            },
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    },
+                    "vNet": {
+                        "value": "[parameters('vNets')[copyIndex()]]"
+                    },
+                    "tags": {
+                        "value": "[parameters('tags')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'vnets.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "linkedTemplate-aks",
+            "dependsOn": [
+                "vnetCopy"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'aks.json', parameters('sasToken'))]"
+                },
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('resgpguid')]"
+                    },
+                    "aksVersion": {
+                        "value": "[parameters('aksVersion')]"
+                    },
+                    "aksNodeCount": {
+                        "value": "[parameters('aksNodeCount')]"
+                    },
+                    "maxPods": {
+                        "value": "[parameters('maxPods')]"
+                    },
+                    "aksSubnetId": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[0].id]"
+                    },
+                    "aksNodeVMSize": {
+                        "value": "[parameters('aksNodeVMSize')]"
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "aksName": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-aks').outputs.aksName.value]"
+        },
+        "aksControlPlaneFQDN": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-aks').outputs.aksControlPlaneFQDN.value]"
+        }
+    }
+}

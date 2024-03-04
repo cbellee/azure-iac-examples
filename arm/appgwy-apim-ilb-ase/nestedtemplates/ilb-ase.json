@@ -1,0 +1,104 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "suffix": {
+            "type": "string"
+        },
+        "subnetName": {
+            "type": "string"
+        },
+        "vnetId": {
+            "type": "string"
+        },
+        "internalLoadBalancingMode": {
+            "type": "int",
+            "defaultValue": 3,
+            "allowedValues": [
+                0,
+                1,
+                2,
+                3
+            ],
+            "metadata": {
+                "description": "0 = public VIP only, 1 = only ports 80/443 are mapped to ILB VIP, 2 = only FTP ports are mapped to ILB VIP, 3 = both ports 80/443 and FTP ports are mapped to an ILB VIP."
+            }
+        },
+        "workerPool": {
+            "type": "string",
+            "allowedValues": [
+                "1",
+                "2",
+                "3"
+            ],
+            "defaultValue": "1",
+            "metadata": {
+                "description": "Defines which worker pool's (WP1, WP2 or WP3) resources will be used for the app service plan."
+            }
+        },
+        "numberOfWorkersFromWorkerPool": {
+            "type": "int",
+            "defaultValue": 1,
+            "metadata": {
+                "description": "Defines the number of workers from the worker pool that will be used by the app service plan."
+            }
+        }
+    },
+    "variables": {
+        "aseName": "[concat('ase', '-', parameters('suffix'))]",
+        "hostingPlanName": "[concat('asp', '-', parameters('suffix'))]"
+    },
+    "resources": [
+        {
+            "apiVersion": "2016-09-01",
+            "type": "Microsoft.Web/hostingEnvironments",
+            "name": "[variables('aseName')]",
+            "kind": "ASEV2",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "internalLoadBalancingMode": "[parameters('internalLoadBalancingMode')]",
+                "name": "[variables('aseName')]",
+                "location": "[resourceGroup().location]",
+                "virtualNetwork": {
+                    "id": "[parameters('vnetId')]",
+                    "subnet": "[parameters('subnetName')]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Web/serverfarms",
+            "apiVersion": "2018-02-01",
+            "kind": "linux",
+            "name": "[tolower(variables('hostingPlanName'))]",
+            "dependsOn": [
+                "[variables('aseName')]"
+            ],
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "name": "[tolower(variables('hostingPlanName'))]",
+                "hostingEnvironmentProfile": {
+                    "id": "[resourceId('Microsoft.Web/hostingEnvironments', variables('aseName'))]"
+                },
+                "sku": {
+                    "name": "[concat('I',parameters('workerPool'))]",
+                    "tier": "Isolated",
+                    "size": "[concat('I',parameters('workerPool'))]",
+                    "family": "I",
+                    "capacity": "[parameters('numberOfWorkersFromWorkerPool')]"
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "aseName": {
+            "type": "string",
+            "value": "[variables('aseName')]"
+        },
+        "aseHostingEnvironmentId": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.Web/hostingEnvironments', variables('aseName'))]"
+        }
+    },
+    "functions": [
+    ]
+}

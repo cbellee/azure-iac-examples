@@ -1,0 +1,510 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "aksServicePrincipalAppId": {
+            "type": "string",
+            "metadata": {
+                "description": "Application ID/Client ID  of the service principal. Used by AKS to manage AKS related resources on Azure like vms, subnets."
+            }
+        },
+        "aksServicePrincipalSecret": {
+            "type": "securestring",
+            "metadata": {
+                "description": "Secret of the service principal. Used by AKS to manage Azure."
+            }
+        },
+        "aksServicePrincipalObjectId": {
+            "type": "string",
+            "metadata": {
+                "description": "Object ID of the service principal."
+            }
+        },
+        "aksDnsPrefix": {
+            "defaultValue": "aks",
+            "type": "string",
+            "metadata": {
+                "description": "Optional DNS prefix to use with hosted Kubernetes API server FQDN."
+            }
+        },
+        "aksAgentOsDiskSizeGB": {
+            "defaultValue": 250,
+            "minValue": 30,
+            "maxValue": 1023,
+            "type": "int",
+            "metadata": {
+                "description": "Disk size (in GB) to provision for each of the agent pool nodes. This value ranges from 30 to 1023."
+            }
+        },
+        "maxPods": {
+            "type": "int",
+            "minValue": 10,
+            "maxValue": 120,
+            "defaultValue": 50
+        },
+        "networkPlugin": {
+            "defaultValue": "azure",
+            "type": "string",
+            "allowedValues": [
+                "azure",
+                "kubenet"
+            ]
+        },
+        "enablePodSecurityPolicy": {
+            "type": "bool",
+            "defaultValue": false
+        },
+        "enableHttpApplicationRouting": {
+            "type": "bool",
+            "defaultValue": false
+        },
+        "aksNodeCount": {
+            "defaultValue": 3,
+            "minValue": 1,
+            "maxValue": 50,
+            "type": "int",
+            "metadata": {
+                "description": "The default number of agent nodes for the cluster."
+            }
+        },
+        "enableAutoScaling": {
+            "defaultValue": true,
+            "type": "bool"
+        },
+        "aksMinNodeCount": {
+            "defaultValue": 1,
+            "minValue": 1,
+            "maxValue": 50,
+            "type": "int",
+            "metadata": {
+                "description": "The minimum number of agent nodes for the cluster."
+            }
+        },
+        "aksMaxNodeCount": {
+            "defaultValue": 10,
+            "minValue": 1,
+            "maxValue": 50,
+            "type": "int",
+            "metadata": {
+                "description": "The maximum number of agent nodes for the cluster."
+            }
+        },
+        "aksNodeVMSize": {
+            "defaultValue": "Standard_D4s_v3",
+            "allowedValues": [
+                "Standard_A0",
+                "Standard_A1",
+                "Standard_A10",
+                "Standard_A11",
+                "Standard_A1_v2",
+                "Standard_A2",
+                "Standard_A2_v2",
+                "Standard_A2m_v2",
+                "Standard_A3",
+                "Standard_A4",
+                "Standard_A4_v2",
+                "Standard_A4m_v2",
+                "Standard_A5",
+                "Standard_A6",
+                "Standard_A7",
+                "Standard_A8",
+                "Standard_A8_v2",
+                "Standard_A8m_v2",
+                "Standard_A9",
+                "Standard_B1ms",
+                "Standard_B1s",
+                "Standard_B2ms",
+                "Standard_B2s",
+                "Standard_B4ms",
+                "Standard_B8ms",
+                "Standard_D1",
+                "Standard_D11",
+                "Standard_D11_v2",
+                "Standard_D11_v2_Promo",
+                "Standard_D12",
+                "Standard_D12_v2",
+                "Standard_D12_v2_Promo",
+                "Standard_D13",
+                "Standard_D13_v2",
+                "Standard_D13_v2_Promo",
+                "Standard_D14",
+                "Standard_D14_v2",
+                "Standard_D14_v2_Promo",
+                "Standard_D15_v2",
+                "Standard_D16_v3",
+                "Standard_D16s_v3",
+                "Standard_D1_v2",
+                "Standard_D2",
+                "Standard_D2_v2",
+                "Standard_D2_v2_Promo",
+                "Standard_D2_v3",
+                "Standard_D2s_v3",
+                "Standard_D3",
+                "Standard_D32_v3",
+                "Standard_D32s_v3",
+                "Standard_D3_v2",
+                "Standard_D3_v2_Promo",
+                "Standard_D4",
+                "Standard_D4_v2",
+                "Standard_D4_v2_Promo",
+                "Standard_D4_v3",
+                "Standard_D4s_v3",
+                "Standard_D5_v2",
+                "Standard_D5_v2_Promo",
+                "Standard_D64_v3",
+                "Standard_D64s_v3",
+                "Standard_D8_v3",
+                "Standard_D8s_v3",
+                "Standard_DS1",
+                "Standard_DS11",
+                "Standard_DS11-1_v2",
+                "Standard_DS11_v2",
+                "Standard_DS11_v2_Promo",
+                "Standard_DS12",
+                "Standard_DS12-1_v2",
+                "Standard_DS12-2_v2",
+                "Standard_DS12_v2",
+                "Standard_DS12_v2_Promo",
+                "Standard_DS13",
+                "Standard_DS13-2_v2",
+                "Standard_DS13-4_v2",
+                "Standard_DS13_v2",
+                "Standard_DS13_v2_Promo",
+                "Standard_DS14",
+                "Standard_DS14-4_v2",
+                "Standard_DS14-8_v2",
+                "Standard_DS14_v2",
+                "Standard_DS14_v2_Promo",
+                "Standard_DS15_v2",
+                "Standard_DS1_v2",
+                "Standard_DS2",
+                "Standard_DS2_v2",
+                "Standard_DS2_v2_Promo",
+                "Standard_DS3",
+                "Standard_DS3_v2",
+                "Standard_DS3_v2_Promo",
+                "Standard_DS4",
+                "Standard_DS4_v2",
+                "Standard_DS4_v2_Promo",
+                "Standard_DS5_v2",
+                "Standard_DS5_v2_Promo",
+                "Standard_E16-4s_v3",
+                "Standard_E16-8s_v3",
+                "Standard_E16_v3",
+                "Standard_E16s_v3",
+                "Standard_E2_v3",
+                "Standard_E2s_v3",
+                "Standard_E32-16s_v3",
+                "Standard_E32-8s_v3",
+                "Standard_E32_v3",
+                "Standard_E32s_v3",
+                "Standard_E4-2s_v3",
+                "Standard_E4_v3",
+                "Standard_E4s_v3",
+                "Standard_E64-16s_v3",
+                "Standard_E64-32s_v3",
+                "Standard_E64_v3",
+                "Standard_E64i_v3",
+                "Standard_E64is_v3",
+                "Standard_E64s_v3",
+                "Standard_E8-2s_v3",
+                "Standard_E8-4s_v3",
+                "Standard_E8_v3",
+                "Standard_E8s_v3",
+                "Standard_F1",
+                "Standard_F16",
+                "Standard_F16s",
+                "Standard_F16s_v2",
+                "Standard_F1s",
+                "Standard_F2",
+                "Standard_F2s",
+                "Standard_F2s_v2",
+                "Standard_F32s_v2",
+                "Standard_F4",
+                "Standard_F4s",
+                "Standard_F4s_v2",
+                "Standard_F64s_v2",
+                "Standard_F72s_v2",
+                "Standard_F8",
+                "Standard_F8s",
+                "Standard_F8s_v2",
+                "Standard_G1",
+                "Standard_G2",
+                "Standard_G3",
+                "Standard_G4",
+                "Standard_G5",
+                "Standard_GS1",
+                "Standard_GS2",
+                "Standard_GS3",
+                "Standard_GS4",
+                "Standard_GS4-4",
+                "Standard_GS4-8",
+                "Standard_GS5",
+                "Standard_GS5-16",
+                "Standard_GS5-8",
+                "Standard_H16",
+                "Standard_H16m",
+                "Standard_H16mr",
+                "Standard_H16r",
+                "Standard_H8",
+                "Standard_H8m",
+                "Standard_L16s",
+                "Standard_L16s_v2",
+                "Standard_L32s",
+                "Standard_L4s",
+                "Standard_L8s",
+                "Standard_L8s_v2",
+                "Standard_M128",
+                "Standard_M128-32ms",
+                "Standard_M128-64ms",
+                "Standard_M128m",
+                "Standard_M128ms",
+                "Standard_M128s",
+                "Standard_M16-4ms",
+                "Standard_M16-8ms",
+                "Standard_M16ms",
+                "Standard_M32-16ms",
+                "Standard_M32-8ms",
+                "Standard_M32ls",
+                "Standard_M32ms",
+                "Standard_M32ts",
+                "Standard_M64",
+                "Standard_M64-16ms",
+                "Standard_M64-32ms",
+                "Standard_M64ls",
+                "Standard_M64m",
+                "Standard_M64ms",
+                "Standard_M64s",
+                "Standard_M8-2ms",
+                "Standard_M8-4ms",
+                "Standard_M8ms",
+                "Standard_NC12",
+                "Standard_NC12s_v2",
+                "Standard_NC12s_v3",
+                "Standard_NC24",
+                "Standard_NC24r",
+                "Standard_NC24rs_v2",
+                "Standard_NC24rs_v3",
+                "Standard_NC24s_v2",
+                "Standard_NC24s_v3",
+                "Standard_NC6",
+                "Standard_NC6s_v2",
+                "Standard_NC6s_v3",
+                "Standard_ND12s",
+                "Standard_ND24rs",
+                "Standard_ND24s",
+                "Standard_ND6s",
+                "Standard_NV12",
+                "Standard_NV24",
+                "Standard_NV6"
+            ],
+            "type": "string",
+            "metadata": {
+                "description": "The size of the Virtual Machine."
+            }
+        },
+        "aksVersion": {
+            "defaultValue": "1.14.6",
+            "type": "string",
+            "metadata": {
+                "description": "The version of Kubernetes."
+            }
+        },
+        "aksSubnetId": {
+            "type": "string"
+        },
+        "aksVnetName": {
+            "type": "string"
+        },
+        "aksSubnetName": {
+            "type": "string"
+        },
+        "suffix": {
+            "type": "string"
+        },
+        "aksServiceCIDR": {
+            "defaultValue": "10.100.0.0/16",
+            "type": "string",
+            "metadata": {
+                "description": "A CIDR notation IP range from which to assign service cluster IPs."
+            }
+        },
+        "aksDnsServiceIP": {
+            "defaultValue": "10.100.0.10",
+            "type": "string",
+            "metadata": {
+                "description": "Containers DNS server IP address."
+            }
+        },
+        "aksDockerBridgeCIDR": {
+            "defaultValue": "172.17.0.1/16",
+            "type": "string",
+            "metadata": {
+                "description": "A CIDR notation IP for Docker bridge."
+            }
+        },
+        "aksEnableRBAC": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable RBAC on the AKS cluster."
+            }
+        }
+    },
+    "variables": {
+        "workspaceName": "[concat('workspace', '-', parameters('suffix'))]",
+        "storageAccountName": "[concat('stor', parameters('suffix'))]",
+        "identityName": "[concat('appgwContrIdentity' , '-', parameters('suffix'))]",
+        "aksClusterName": "[concat('aks' , '-', parameters('suffix'))]",
+        "identityId": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
+        "aksClusterId": "[resourceId('Microsoft.ContainerService/managedClusters', variables('aksClusterName'))]",
+        "networkContributorRole": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', '4d97b98b-1d4f-4787-a291-c67834d212e7')]",
+        "managedIdentityOperatorRole": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', 'f1a07417-d97a-45cb-824c-7a7467783830')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2018-07-01",
+            "name": "[variables('storageAccountName')]",
+            "location": "[resourceGroup().location]",
+            "tags": {
+                "displayName": "[variables('storageAccountName')]"
+            },
+            "sku": {
+                "name": "Standard_LRS"
+            },
+            "kind": "StorageV2"
+        },
+        {
+            "name": "[variables('workspaceName')]",
+            "type": "Microsoft.OperationalInsights/workspaces",
+            "apiVersion": "2015-11-01-preview",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "sku": {
+                    "name": "Standalone"
+                },
+                "retentionInDays": 30
+            }
+        },
+        {
+            "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+            "name": "[variables('identityName')]",
+            "apiVersion": "2015-08-31-PREVIEW",
+            "location": "[resourceGroup().location]"
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "name": "RoleAssignmentDeploymentForKubenetesSp",
+            "apiVersion": "2017-05-10",
+            "subscriptionId": "[subscription().subscriptionId]",
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "Incremental",
+                "template": {
+                    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {},
+                    "variables": {},
+                    "resources": [
+                        {
+                            "type": "Microsoft.Network/virtualNetworks/subnets/providers/roleAssignments",
+                            "apiVersion": "2017-05-01",
+                            "name": "[concat(parameters('aksVnetName'), '/', parameters('aksSubnetName'),'/Microsoft.Authorization/', guid(resourceGroup().id, 'aksvnetaccess'))]",
+                            "properties": {
+                                "roleDefinitionId": "[variables('networkContributorRole')]",
+                                "principalId": "[parameters('aksServicePrincipalObjectId')]",
+                                "scope": "[parameters('aksSubnetId')]"
+                            }
+                        },
+                        {
+                            "type": "Microsoft.ManagedIdentity/userAssignedIdentities/providers/roleAssignments",
+                            "apiVersion": "2017-05-01",
+                            "name": "[concat(variables('identityName'), '/Microsoft.Authorization/', guid(resourceGroup().id, 'aksidentityaccess'))]",
+                            "properties": {
+                                "roleDefinitionId": "[variables('managedIdentityOperatorRole')]",
+                                "principalId": "[parameters('aksServicePrincipalObjectId')]",
+                                "scope": "[variables('identityId')]",
+                                "principalType": "ServicePrincipal"
+                            }
+                        }
+                    ]
+                }
+            },
+            "dependsOn": [
+                "[concat('Microsoft.ManagedIdentity/userAssignedIdentities/', variables('identityName'))]"
+            ]
+        },
+        {
+            "type": "Microsoft.ContainerService/managedClusters",
+            "name": "[variables('aksClusterName')]",
+            "apiVersion": "2019-04-01",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Resources/deployments/', 'RoleAssignmentDeploymentForKubenetesSp')]",
+                "[variables('workspaceName')]"
+            ],
+            "properties": {
+                "kubernetesVersion": "[parameters('aksVersion')]",
+                "enableRBAC": "[parameters('aksEnableRBAC')]",
+                "enablePodSecurityPolicy": "[parameters('enablePodSecurityPolicy')]",
+                "dnsPrefix": "[parameters('aksDnsPrefix')]",
+                "addonProfiles": {
+                    "httpApplicationRouting": {
+                        "enabled": "[parameters('enableHttpApplicationRouting')]"
+                    },
+                    "omsagent": {
+                        "enabled": true,
+                        "config": {
+                            "logAnalyticsWorkspaceResourceID": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName'))]"
+                        }
+                    }
+                },
+                "agentPoolProfiles": [
+                    {
+                        "name": "pool1",
+                        "osDiskSizeGB": "[parameters('aksAgentOsDiskSizeGB')]",
+                        "count": "[parameters('aksNodeCount')]",
+                        "minCount": "[parameters('aksMinNodeCount')]",
+                        "maxCount": "[parameters('aksMaxNodeCount')]",
+                        "vmSize": "[parameters('aksNodeVMSize')]",
+                        "osType": "Linux",
+                        "type": "VirtualMachineScaleSets",
+                        "storageProfile": "ManagedDisks",
+                        "vnetSubnetID": "[parameters('aksSubnetId')]",
+                        "enableAutoscaling": "[parameters('enableAutoScaling')]",
+                        "maxPods": "[parameters('maxPods')]"
+                    }
+                ],
+                "servicePrincipalProfile": {
+                    "clientId": "[parameters('aksServicePrincipalAppId')]",
+                    "secret": "[parameters('aksServicePrincipalSecret')]"
+                },
+                "networkProfile": {
+                    "networkPlugin": "[parameters('networkPlugin')]",
+                    "serviceCidr": "[parameters('aksServiceCIDR')]",
+                    "dnsServiceIP": "[parameters('aksDnsServiceIP')]",
+                    "dockerBridgeCidr": "[parameters('aksDockerBridgeCIDR')]"
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "aksApiServerAddress": {
+            "type": "string",
+            "value": "[reference(variables('aksClusterId'), '2018-03-31').fqdn]"
+        },
+        "aksName": {
+            "type": "string",
+            "value": "[variables('aksClusterName')]"
+        },
+        "aksControlPlaneFQDN": {
+            "type": "string",
+            "value": "[reference(concat('Microsoft.ContainerService/managedClusters/', variables('aksClusterName'))).fqdn]"
+        },
+        "aksManagedIdentityId": {
+            "type": "string",
+            "value": "[variables('identityId')]"
+        }
+    }
+}

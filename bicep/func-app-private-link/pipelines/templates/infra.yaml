@@ -1,0 +1,50 @@
+parameters:
+  - name: azureSubscription
+    type: string
+  - name: resourceGroupName
+    type: string
+  - name: environmentName
+    type: string
+  - name: location
+    type: string
+    default: 'australiaeast'
+  - name: deploymentName
+    type: string
+    default: 'infra-deployment'
+  - name: templateFileName
+    type: string
+    default: 'main.bicep'
+  - name: vmAdminPassword
+    type: string
+    default: 'M1cr0soft1234567890'
+
+jobs:
+- job: infra
+  displayName: 'Deploy intrastructure to ${{ parameters.environmentName }}'
+  pool:
+    vmImage: 'ubuntu-latest'
+  steps:        
+    
+  - task: DownloadPipelineArtifact@2
+    inputs:
+      artifactName: 'bicep'
+      targetPath: $(Build.SourcesDirectory)/bicep
+
+  - task: AzureCLI@2
+    name: bicep
+    inputs:
+      azureSubscription: $(azureSubscription)
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        az --version
+        az group create --name ${{ parameters.resourceGroupName }} --location ${{ parameters.location }}
+
+        az deployment group create \
+          --name ${{ parameters.deploymentName }} \
+          --resource-group ${{ parameters.resourceGroupName }} \
+          --template-file $(Build.SourcesDirectory)/bicep/${{ parameters.templateFileName }} \
+          --parameters location=${{ parameters.location }} \
+          --parameters environmentName=${{ parameters.environmentName }}
+          --parameters vmAdminPassword=$(vmAdminPassword))
+

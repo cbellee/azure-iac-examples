@@ -1,0 +1,326 @@
+{
+	"$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+	"contentVersion": "1.0.0.0",
+	"parameters": {
+		"deploymentMode": {
+			"type": "string",
+			"allowedValues": [
+				"Incremental",
+				"Complete"
+			],
+			"defaultValue": "Incremental"
+		},
+		"storageUri": {
+			"type": "string"
+		},
+		"tags": {
+			"type": "object"
+		},
+		"vNets": {
+			"type": "array"
+		},
+		"sasToken": {
+			"type": "string"
+		},
+		"aseZones": {
+			"type": "array",
+			"defaultValue": [
+				"1",
+				"2"
+			]
+		},
+		"dbAdminPassword": {
+			"type": "string"
+		},
+		"dbAdminLogin": {
+			"type": "string",
+			"defaultValue": "dbadmin"
+		},
+		"flexServerEnabled": {
+			"type": "bool",
+			"defaultValue": true
+		}
+	},
+	"variables": {
+		"suffix": "[substring(uniqueString(resourceGroup().id, subscription().subscriptionId, resourceGroup().location), 0, 6)]",
+		"mySqlServerName": "[concat('mysql-flxsrv-', variables('suffix'))]",
+		"mariaDbServerName": "[concat('mariadb-', variables('suffix'))]"
+	},
+	"resources": [
+		{
+			"type": "Microsoft.Resources/deployments",
+			"apiVersion": "2018-05-01",
+			"name": "linkedTemplate-nsg",
+			"dependsOn": [
+			],
+			"properties": {
+				"mode": "Incremental",
+				"templateLink": {
+					"contentVersion": "1.0.0.0",
+					"uri": "[concat(parameters('storageUri'), '/', 'nsg.json', parameters('sasToken'))]"
+				},
+				"parameters": {
+					"suffix": {
+						"value": "[variables('suffix')]"
+					}
+				}
+			}
+		},
+		{
+			"name": "[concat('linkedTemplate-vnet', '-', copyIndex())]",
+			"type": "Microsoft.Resources/deployments",
+			"apiVersion": "2017-05-10",
+			"comments": "This deployment links to the vnet nested ARM template",
+			"dependsOn": [
+				"linkedTemplate-nsg"
+			],
+			"condition": true,
+			"resourceGroup": "[resourceGroup().name]",
+			"copy": {
+				"name": "vnetCopy",
+				"count": "[length(parameters('vNets'))]"
+			},
+			"properties": {
+				"mode": "[parameters('deploymentMode')]",
+				"parameters": {
+					"suffix": {
+						"value": "[variables('suffix')]"
+					},
+					"vNet": {
+						"value": "[parameters('vNets')[copyIndex()]]"
+					},
+					"tags": {
+						"value": "[parameters('tags')]"
+					}
+				},
+				"templateLink": {
+					"contentVersion": "1.0.0.0",
+					"uri": "[concat(parameters('storageUri'), '/', 'vnet.json', parameters('sasToken'))]"
+				}
+			}
+		},
+		{
+			"type": "Microsoft.Resources/deployments",
+			"apiVersion": "2018-05-01",
+			"name": "[concat('linkedTemplate-ase-', copyIndex())]",
+			"dependsOn": [
+				"vnetCopy"
+			],
+			"copy": {
+				"name": "aseCopy",
+				"count": "[length(parameters('aseZones'))]"
+			},
+			"properties": {
+				"mode": "Incremental",
+				"parameters": {
+					"suffix": {
+						"value": "[variables('suffix')]"
+					},
+					"vnetId": {
+						"value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.vnetRef.value]"
+					},
+					"subnetName": {
+						"value": "[parameters('vNets')[0].subnets[copyIndex(1)].name]"
+					},
+					"loadBalancingMode": {
+						"value": 3 // Web (80/443) + FTP (21) ports mapped to ILB
+					},
+					"sku": {
+						"value": "Isolated"
+					},
+					"skuCode": {
+						"value": "I1"
+					},
+					"workerSizeId": {
+						"value": "0"
+					},
+					"workerSize": {
+						"value": "0"
+					},
+					"aseZone": {
+						"value": "[parameters('aseZones')[copyIndex()]]"
+					},
+					"siteName": {
+						"value": "[concat('site-', parameters('aseZones')[copyIndex()], '-', variables('suffix'))]"
+					}
+				},
+				"templateLink": {
+					"contentVersion": "1.0.0.0",
+					"uri": "[concat(parameters('storageUri'), '/', 'ase.json', parameters('sasToken'))]"
+				}
+			}
+		},
+		{
+			"type": "Microsoft.Resources/deployments",
+			"apiVersion": "2018-05-01",
+			"name": "linkedTemplate-mariadb-server",
+			"dependsOn": [
+				"vnetCopy"
+			],
+			"condition": "[if(equals(parameters('flexServerEnabled'), bool('true')), bool('false'), bool('true'))]",
+			"properties": {
+				"mode": "Incremental",
+				"parameters": {
+					"serverName": {
+						"value": "[variables('mariaDbServerName')]"
+					},
+					"location": {
+						"value": "[resourceGroup().location]"
+					},
+					"skuSizeMB": {
+						"value": 102400
+					},
+					"tags": {
+						"value": {}
+					},
+					"backupRetentionDays": {
+						"value": 7
+					},
+					"storageAutoGrow": {
+						"value": "Enabled"
+					},
+					"geoRedundantBackup": {
+						"value": "Disabled"
+					},
+					"administratorLogin": {
+						"value": "[parameters('dbAdminLogin')]"
+					},
+					"administratorLoginPassword": {
+						"value": "[parameters('dbAdminPassword')]"
+					},
+					"version": {
+						"value": "10.3"
+					},
+					"sourceSubnetIds": {
+						"value": [
+							"[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[1]]",
+							"[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[2]]"
+						]
+					}
+				},
+				"templateLink": {
+					"contentVersion": "1.0.0.0",
+					"uri": "[concat(parameters('storageUri'), '/', 'mariadb.json', parameters('sasToken'))]"
+				}
+			}
+		},
+		{
+			"type": "Microsoft.Resources/deployments",
+			"apiVersion": "2018-05-01",
+			"name": "linkedTemplate-mysqldb-flex-server",
+			"condition": "[if(equals(parameters('flexServerEnabled'), bool('true')), bool('true'), bool('false'))]",
+			"dependsOn": [
+				"vnetCopy"
+			],
+			"properties": {
+				"mode": "Incremental",
+				"parameters": {
+					"serverName": {
+						"value": "[variables('mySqlServerName')]"
+					},
+					"location": {
+						"value": "[resourceGroup().location]"
+					},
+					"serverEdition": {
+						"value": "GeneralPurpose"
+					},
+					"vCores": {
+						"value": 2
+					},
+					"storageSizeMB": {
+						"value": 51200
+					},
+					"haEnabled": {
+						"value": "Enabled"
+					},
+					"tags": {
+						"value": {}
+					},
+					"firewallRules": {
+						"value": {
+							"rules": []
+						}
+					},
+					"vnetData": {
+						"value": {
+							"subnetArmResourceId": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[3].id]"
+						}
+					},
+					"backupRetentionDays": {
+						"value": 7
+					},
+					"geoRedundantBackup": {
+						"value": "Disabled"
+					},
+					"vmName": {
+						"value": "Standard_D2ds_v4"
+					},
+					"administratorLogin": {
+						"value": "[parameters('dbAdminLogin')]"
+					},
+					"administratorLoginPassword": {
+						"value": "[parameters('dbAdminPassword')]"
+					},
+					"version": {
+						"value": "5.7"
+					}
+				},
+				"templateLink": {
+					"contentVersion": "1.0.0.0",
+					"uri": "[concat(parameters('storageUri'), '/', 'mysqldb-flex.json', parameters('sasToken'))]"
+				}
+			}
+		}
+	],
+	"outputs": {
+		"appGatewaySubnetId": {
+			"type": "string",
+			"value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[0].id]"
+		},
+		"suffix": {
+			"type": "string",
+			"value": "[variables('suffix')]"
+		},
+		"mySqlDbSubnetId": {
+			"type": "object",
+			"value": {
+				"subnetArmResourceId": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[3].id]"
+			}
+		},
+		"aseHostingEnvironmentIds": {
+			"type": "array",
+			"value": [
+				"[reference('Microsoft.Resources/deployments/linkedTemplate-ase-0').outputs.aseHostingEnvironmentId.value]",
+				"[reference('Microsoft.Resources/deployments/linkedTemplate-ase-1').outputs.aseHostingEnvironmentId.value]"
+			]
+		},
+		"siteFqdns": {
+			"type": "array",
+			"value": [
+				"[reference('Microsoft.Resources/deployments/linkedTemplate-ase-0').outputs.siteFqdn.value]",
+				"[reference('Microsoft.Resources/deployments/linkedTemplate-ase-1').outputs.siteFqdn.value]"
+			]
+		},
+		"aseFqdns": {
+			"type": "array",
+			"value": [
+				"[reference('Microsoft.Resources/deployments/linkedTemplate-ase-0').outputs.aseFqdn.value]",
+				"[reference('Microsoft.Resources/deployments/linkedTemplate-ase-1').outputs.aseFqdn.value]"
+			]
+		},
+		"aseVnetIds": {
+			"type": "array",
+			"value": [
+				"[reference('Microsoft.Resources/deployments/linkedTemplate-ase-0').outputs.aseVnetId.value]",
+				"[reference('Microsoft.Resources/deployments/linkedTemplate-ase-1').outputs.aseVnetId.value]"
+			]
+		},
+		"siteNames": {
+			"type": "array",
+			"value": [
+				"[reference('Microsoft.Resources/deployments/linkedTemplate-ase-0').outputs.siteName.value]",
+				"[reference('Microsoft.Resources/deployments/linkedTemplate-ase-1').outputs.siteName.value]"
+			]
+		}
+	}
+}

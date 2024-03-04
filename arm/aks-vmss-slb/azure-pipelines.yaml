@@ -1,0 +1,184 @@
+# Pipeline to deploy Network, AKS & SLB
+
+name: deployAzureResources
+
+# specific path build
+trigger:
+  branches:
+    include:
+    - master
+    - develop
+  paths:
+    include:
+    - arm/aks-vmss-slb/*
+    exclude:
+    - arm/aks-vmss-slb/azure-pipelines.yml
+
+variables:
+  # serviceConnection: # set in GUI variables
+  - group: aks_arm_vars
+  - name: location
+    value: australiaeast
+  - name: resourceGroupName
+    value: 'aks-vmss-slb-rg'
+  - name: containerName
+    value: nestedtemplates
+  - name: timeStamp
+    value: $[format('{0:yyyy}-{0:MM}-{0:dd}-{0:HHmmss}', pipeline.startTime)]
+  - name: aksVersion
+    value: 1.16.9
+  - name: aksNodeCount
+    value: 1
+  - name: maxPods
+    value: 50
+  - name: aksMinNodeCount
+    value: 1
+  - name: aksMaxNodeCount
+    value: 5
+  - name: aksNodeVMSize
+    value: Standard_F2s_v2
+  - name: applicationGatewaySku
+    value: WAF_v2
+
+stages:
+- stage: 'prerequisite_resources'
+  displayName: 'prerequisite resources'
+  
+  jobs:
+    - job: 'prerequisite_resource_job'
+      pool:
+        vmImage: 'ubuntu-latest'
+      steps:
+        - task: AzureResourceGroupDeployment@2
+          name: 'deployACR'
+          displayName: 'Deploy Azure Container Registry'
+          enabled: true
+          inputs:
+            action: Create Or Update Resource Group
+            azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+            resourceGroupName: $(resourceGroupName)
+            csmFile: ./arm/aks-vmss-slb/nestedtemplates/acr.json
+            location: $(location)
+            templateLocation: Linked artifact
+            deploymentMode: Incremental
+            deploymentName: "acrDeployment-$(timeStamp)"
+            outputVariable: acrTemplateOutput
+        
+        - task: ARM Outputs@5
+          name: 'GetACRDeploymentOutput'
+          displayName: 'Get ACR Deployment Output'
+          enabled: true
+          inputs:
+            ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+            ConnectedServiceNameARM: $(ADO_SERVICE_CONNECTION_NAME)
+            resourceGroupName: $(resourceGroupName)
+            whenLastDeploymentIsFailed: 'fail'
+            deploymentNameFilter: "acrDeployment-$(timeStamp)"
+
+        - task: AzureCLI@1
+          displayName: 'Build container image in ACR'
+          enabled: false
+          inputs:
+            azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+            scriptLocation: 'inlineScript'
+            inlineScript: 'az acr build --image $(Build.Repository.Name) --registry $(registryName) --file ./Dockerfile .'
+
+- stage: 'dev'
+  displayName: 'dev environment release'
+  variables:
+    tags: '{"costCentre":"478132","project":"test-project"}'
+  jobs:
+    - deployment: 
+      pool:
+        vmImage: 'ubuntu-latest'
+      environment: aks-arm-public-dev
+      strategy:
+       runOnce:
+        deploy:
+          steps:
+          - checkout: self # needed to checkout repo!
+          - task: PowerShell@2
+            inputs:
+              targetType: 'inline'
+              script: |
+                $now = Get-Date
+                $sasTokenExpiry = $now.AddHours(2).ToString('u') -replace ' ','T'
+                Write-Host "##vso[task.setvariable variable=sasTokenExpiry;]$sasTokenExpiry"
+          - task: AzureResourceGroupDeployment@2
+            name: 'DeployStorage'
+            displayName: 'Deploy storage account for arm templates'
+            enabled: true
+            inputs:
+              action: Create Or Update Resource Group
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              resourceGroupName: $(resourceGroupName)
+              csmFile: ./arm/aks-vmss-slb/nestedtemplates/storage.json
+              location: $(location)
+              templateLocation: Linked artifact
+              deploymentMode: Incremental
+              deploymentOutputs: storageDeploymentOutput
+              deploymentName: "storageDeployment-$(timeStamp)"
+              overrideParameters: -sasTokenExpiry $(sasTokenExpiry) -storageSku Standard_LRS -storageKind StorageV2 -tags $(tags) -containerName $(containerName)
+
+          - task: ARM Outputs@5
+            name: 'GetStorageDeploymentOutput'
+            displayName: 'Get ARM Storage Deployment Output'
+            enabled: false
+            inputs:
+              ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+              ConnectedServiceNameARM: $(ADO_SERVICE_CONNECTION_NAME)
+              resourceGroupName: $(resourceGroupName)
+              whenLastDeploymentIsFailed: 'fail'
+              deploymentNameFilter: "storageDeployment-$(timeStamp)"
+
+          - task: PowerShell@2
+            displayName: 'Get Storage Deployment Outputs'
+            inputs:
+              targetType: 'inline'
+              script: |
+                $outputs = '$(storageDeploymentOutput)' | ConvertFrom-Json
+                foreach ($output in $outputs.PSObject.Properties) {
+                  Write-Host "$($output.Name) - $($output.Value.value)"
+                  Write-Host "##vso[task.setvariable variable=$($output.Name);]$($output.Value.value)" 
+                }
+
+          - task: AzureCLI@1
+            displayName: 'Copy ARM template files to Azure blob storage'
+            enabled: true
+            inputs:
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              scriptLocation: 'inlineScript'
+              inlineScript: 'az storage blob upload-batch -d $(containerName) -s ./arm/aks-vmss-slb/nestedtemplates/ --pattern *.json --account-name $(storageAccountName)'
+      
+          - task: AzureResourceGroupDeployment@2
+            name: 'deployResources'
+            displayName: 'Deploy resources'
+            enabled: true
+            inputs:
+              action: Create Or Update Resource Group
+              azureSubscription: $(ADO_SERVICE_CONNECTION_NAME)
+              resourceGroupName: $(resourceGroupName)
+              csmFile: ./arm/aks-vmss-slb/azuredeploy.json
+              csmParametersFile: ./arm/aks-vmss-slb/azuredeploy.parameters.json
+              location: $(location)
+              templateLocation: Linked artifact
+              deploymentMode: Incremental
+              deploymentName: "resourceDeployment-$(timeStamp)"
+              overrideParameters: 
+                -storageUri $(storageContainerUri)
+                -sasToken $(storageAccountSasToken)
+                -aksVersion $(aksVersion)
+                -aksNodeCount $(aksNodeCount)
+                -aksNodeVMSize $(aksNodeVMSize)
+                -maxPods $(maxPods)
+          - task: ARM Outputs@5
+            name: 'GetResourceDeploymentOutput'
+            displayName: 'Get ARM Resource Deployment Output'
+            enabled: true
+            inputs:
+              ConnectedServiceNameSelector: 'ConnectedServiceNameARM'
+              ConnectedServiceNameARM: $(ADO_SERVICE_CONNECTION_NAME)
+              resourceGroupName: $(resourceGroupName)
+              whenLastDeploymentIsFailed: 'fail'
+              deploymentNameFilter: "resourceDeployment-$(timeStamp)"
+

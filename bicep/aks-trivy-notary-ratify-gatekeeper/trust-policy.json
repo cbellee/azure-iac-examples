@@ -1,0 +1,16 @@
+{
+    "version": "1.0",
+    "trustPolicies": [
+        {
+            "name": "bellee-io-images",
+            "registryScopes": [ "acru33faoz5hdulu.azurecr.io/azure-vote-front" ],
+            "signatureVerification": {
+                "level" : "strict" 
+            },
+            "trustStores": [ "ca:bellee.io" ],
+            "trustedIdentities": [
+                "x509.subject: CN=bellee.io,O=MSFT,L=Sydney,ST=NSW,C=AU"
+            ]
+        }
+    ]
+}

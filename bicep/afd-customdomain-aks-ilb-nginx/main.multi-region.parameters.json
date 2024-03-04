@@ -1,0 +1,51 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "tags": {
+            "value": {
+                "costcentre": "123456789"
+            }
+        },
+        "adminGroupObjectID": {
+            "value": null
+        },
+        "k8sVersion": {
+            "value": null
+        },
+        "vmSku": {
+            "value": "Standard_D4ds_v5"
+        },
+        "sshPublicKey": {
+            "value": null
+        },
+        "addressPrefixes": {
+            "value": [
+                "10.0.0.0/16",
+                "10.1.0.0/16"
+            ]
+        },
+        "subnets": {
+            "value": [
+                {
+                    "name": "aks-system-subnet"
+                },
+                {
+                    "name": "aks-user-subnet"
+                },
+                {
+                    "name": "aks-lb-subnet"
+                },
+                {
+                    "name": "mgmt-subnet"
+                },
+                {
+                    "name": "pls-subnet"
+                },
+                {
+                    "name": "AzureBastionSubnet"
+                }
+            ]
+        }
+    }
+}

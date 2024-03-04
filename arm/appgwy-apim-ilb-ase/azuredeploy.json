@@ -1,0 +1,447 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "deploymentMode": {
+            "type": "string",
+            "allowedValues": [
+                "Incremental",
+                "Complete"
+            ],
+            "defaultValue": "Incremental"
+        },
+        "storageUri": {
+            "type": "string"
+        },
+        "tags": {
+            "type": "object"
+        },
+        "vNets": {
+            "type": "array"
+        },
+        "sasToken": {
+            "type": "string"
+        },
+        "keyVaultId": {
+            "type": "string"
+        },
+        "keyVaultUri": {
+            "type": "string"
+        },
+        "keyVaultName": {
+            "type": "string"
+        },
+        "sslPfxSecretName": {
+            "type": "string"
+        },
+        "apimPortalHostName": {
+            "type": "string"
+        },
+        "apimGatewayHostName": {
+            "type": "string"
+        },
+        "functionBody": {
+            "type": "string"
+        },
+        "isDeployASE": {
+            "type": "bool",
+            "defaultValue": false
+        }
+    },
+    "variables": {
+        "suffix": "[substring(replace(guid(resourceGroup().id), '-', ''), 0, 4)]",
+        "separatedAddressprefix": "[split(parameters('vNets')[0].subnets[3].addressPrefix,'.')]",
+        "firewallPrivateIpAddress": "[concat(variables('separatedAddressprefix')[0],'.',variables('separatedAddressprefix')[1],'.',variables('separatedAddressprefix')[2], '.4')]"
+    },
+    "resources": [
+        {
+            "name": "linkedTemplate-udr",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "comments": "This deployment links to the UDR nested ARM template",
+            "properties": {
+                "mode": "Incremental",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "azureFirewallPrivateIpAddress": {
+                        "value": "[variables('firewallPrivateIpAddress')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'udr.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "linkedTemplate-nsg",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'nsg.json', parameters('sasToken'))]"
+                },
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "appGatewayPublicIpAddress": {
+                        "value": "1.1.1.1"
+                    }
+                }
+            }
+        },
+        {
+            "name": "[concat('linkedTemplate-vnet', '-', copyIndex())]",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2017-05-10",
+            "comments": "This deployment links to the gatewayVpn nested ARM template",
+            "dependsOn": [
+                "[concat('Microsoft.Resources/deployments/', 'linkedTemplate-udr')]",
+                "[concat('Microsoft.Resources/deployments/', 'linkedTemplate-nsg')]"
+            ],
+            "condition": true,
+            "resourceGroup": "[resourceGroup().name]",
+            "copy": {
+                "name": "vnetCopy",
+                "count": "[length(parameters('vNets'))]"
+            },
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "vNet": {
+                        "value": "[parameters('vNets')[copyIndex()]]"
+                    },
+                    "tags": {
+                        "value": "[parameters('tags')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'vnets.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "name": "linkedTemplate-peerings",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2017-05-10",
+            "comments": "This deployment links to the peerings nested ARM template",
+            "dependsOn": [
+                "vnetCopy"
+            ],
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "vNets": {
+                        "value": "[parameters('vNets')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'peerings.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "linkedTemplate-apim",
+            "dependsOn": [
+                "linkedTemplate-peerings"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "apimSku": {
+                        "value": {
+                            "name": "Developer",
+                            "capacity": 1
+                        }
+                    },
+                    "portalHostName": {
+                        "value": "[parameters('apimPortalHostName')]"
+                    },
+                    "gatewayHostName": {
+                        "value": "[parameters('apimGatewayHostName')]"
+                    },
+                    "subnetId": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[1].id]"
+                    },
+                    "deployCertificates": {
+                        "value": false
+                    },
+                    "portalCertSecretName": {
+                        "value": "[parameters('sslPfxSecretName')]"
+                    },
+                    "gatewayCertSecretName": {
+                        "value": "[parameters('sslPfxSecretName')]"
+                    },
+                    "keyVaultUri": {
+                        "value": "[parameters('keyVaultUri')]"
+                    },
+                    "keyVaultName": {
+                        "value": "[parameters('keyVaultName')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'apim.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "linkedTemplate-ase",
+            "condition": "[if(parameters('isDeployASE'), bool('true'), bool('false'))]",
+            "dependsOn": [
+                "linkedTemplate-peerings"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "vnetId": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-1').outputs.vnetRef.value]"
+                    },
+                    "subnetName": {
+                        "value": "[parameters('vNets')[1].subnets[0].name]" // spoke vnet -> 'ASESubnet'
+                    },
+                    "internalLoadBalancingMode": {
+                        "value": 3 // Web (80/443) + FTP (21) ports mapped to ILB
+                    },
+                    "workerPool": {
+                        "value": "1"
+                    },
+                    "numberOfWorkersFromWorkerPool": {
+                        "value": 1
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'ilb-ase.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "linkedTemplate-asp",
+            "condition": "[if(parameters('isDeployASE'), bool('false'), bool('true'))]",
+            "dependsOn": [
+                "linkedTemplate-peerings"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "subnetId": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-1').outputs.subnetRefs.value[0].id]" // spoke vnet -> 'ASESubnet'
+                    },
+                    "apimSubnetId": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[1].id]" // spoke vnet -> 'APIMSubnet'
+                    },
+                    "sku": {
+                        "value": "P1V2"
+                    },
+                    "functionBody": {
+                        "value": "[parameters('functionBody')]"
+                    },
+                    "appNames": {
+                        "value": [
+                            "func-app-1",
+                            "func-app-2"
+                        ]
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'func.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "linkedTemplate-apim-update",
+            "condition": true,
+            "dependsOn": [
+                "[concat('Microsoft.Resources/deployments/', 'linkedTemplate-apim')]"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "apimSku": {
+                        "value": {
+                            "name": "Developer",
+                            "capacity": 1
+                        }
+                    },
+                    "portalHostName": {
+                        "value": "[parameters('apimPortalHostName')]"
+                    },
+                    "gatewayHostName": {
+                        "value": "[parameters('apimGatewayHostName')]"
+                    },
+                    "subnetId": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[1].id]"
+                    },
+                    "keyVaultUri": {
+                        "value": "[parameters('keyVaultUri')]"
+                    },
+                    "keyVaultName": {
+                        "value": "[parameters('keyVaultName')]"
+                    },
+                    "deployCertificates": {
+                        "value": true
+                    },
+                    "portalCertSecretName": {
+                        "value": "[parameters('sslPfxSecretName')]"
+                    },
+                    "gatewayCertSecretName": {
+                        "value": "[parameters('sslPfxSecretName')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'apim.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "name": "linkedTemplate-appGateway",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2017-05-10",
+            "comments": "This deployment links to the appgateway nested ARM template",
+            "dependsOn": [
+                "[concat('Microsoft.Resources/deployments/', 'linkedTemplate-apim')]"
+            ],
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "apimPortalHostName": {
+                        "value": "[parameters('apimPortalHostName')]"
+                    },
+                    "apimGatewayHostName": {
+                        "value": "[parameters('apimGatewayHostName')]"
+                    },
+                    "apimGatewaySslCert": {
+                        "reference": {
+                            "keyVault": {
+                                "id": "[parameters('keyVaultId')]"
+                            },
+                            "secretName": "[parameters('sslPfxSecretName')]"
+                        }
+                    },
+                    "apimPortalSslCert": {
+                        "reference": {
+                            "keyVault": {
+                                "id": "[parameters('keyVaultId')]"
+                            },
+                            "secretName": "[parameters('sslPfxSecretName')]"
+                        }
+                    },
+                    "subnetId": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[0].id]"
+                    },
+                    "apimPrivateIpAddress": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-apim').outputs.apimPrivateIpAddress.value]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'appgateway.json', parameters('sasToken'))]"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "linkedTemplate-update-nsg",
+            "dependsOn": [
+                "[concat('Microsoft.Resources/deployments/', 'linkedTemplate-appGateway')]"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'nsg.json', parameters('sasToken'))]"
+                },
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "appGatewayPublicIpAddress": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-appGateway').outputs.appGatewayPublicIpAddress.value]"
+                    }
+                }
+            }
+        },
+        {
+            "name": "linkedTemplate-azFirewall",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2017-05-10",
+            "comments": "This deployment links to the azFirewall nested ARM template",
+            "dependsOn": [
+                "linkedTemplate-apim"
+            ],
+            "resourceGroup": "[resourceGroup().name]",
+            "properties": {
+                "mode": "[parameters('deploymentMode')]",
+                "parameters": {
+                    "suffix": {
+                        "value": "[variables('suffix')]"
+                    },
+                    "firewallSubnetRef": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-vnet-0').outputs.subnetRefs.value[3].id]"
+                    },
+                    "apimPrivateIpAddress": {
+                        "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-apim').outputs.apimPrivateIpAddress.value]"
+                    },
+                    "apimGatewayHostName": {
+                        "value": "[parameters('apimGatewayHostName')]"
+                    },
+                    "appGatewaySubnetPrefix": {
+                        "value": "[parameters('vNets')[0].subnets[0].addressPrefix]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[concat(parameters('storageUri'), '/', 'azfirewall.json', parameters('sasToken'))]"
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "appGatewayPublicDnsName": {
+            "type": "string",
+            "value": "[reference('Microsoft.Resources/deployments/linkedTemplate-appGateway').outputs.appGatewayPublicDnsName.value]"
+        }
+    }
+}

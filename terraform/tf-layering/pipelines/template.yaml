@@ -1,0 +1,105 @@
+parameters:
+- name: clientId
+  type: string
+- name: clientSecret
+  type: string
+- name: subscriptionId
+  type: string
+- name: tenantId
+  type: string
+- name: tfPath
+  type: string
+
+jobs:
+- job: 'infra_ci'
+  steps:
+    - checkout: self                   
+    - task: Bash@3
+      displayName: 'Terraform init'
+      name: 'terraform_init'
+      env:
+        ARM_CLIENT_ID: ${{ parameters.clientId }}
+        ARM_CLIENT_SECRET: ${{ parameters.clientSecret }}
+        ARM_TENANT_ID: ${{ parameters.tenantId }}
+        ARM_SUBSCRIPTION_ID: ${{ parameters.subscriptionId }}
+      inputs:
+        targetType: inline
+        workingDirectory: ${{ parameters.tfPath }}
+        failOnStderr: true
+        bashEnvValue: 
+        script: |
+          terraform init
+    - task: Bash@3
+      displayName: 'Terraform validate'
+      name: 'terraform_validate'
+      env:
+        ARM_CLIENT_ID: ${{ parameters.clientId }}
+        ARM_CLIENT_SECRET: ${{ parameters.clientSecret }}
+        ARM_TENANT_ID: ${{ parameters.tenantId }}
+        ARM_SUBSCRIPTION_ID: ${{ parameters.subscriptionId }}
+      inputs:
+        targetType: inline
+        workingDirectory: ${{ parameters.tfPath }}
+
+        failOnStderr: true
+        script: |
+          terraform validate
+    - task: Bash@3
+      displayName: 'Terraform plan'
+      name: 'terraform_plan'
+      env:
+        ARM_CLIENT_ID: ${{ parameters.clientId }}
+        ARM_CLIENT_SECRET: ${{ parameters.clientSecret }}
+        ARM_TENANT_ID: ${{ parameters.tenantId }}
+        ARM_SUBSCRIPTION_ID: ${{ parameters.subscriptionId }}
+      inputs:
+        targetType: inline
+        workingDirectory: ${{ parameters.tfPath }}
+
+        failOnStderr: true
+        script: |
+          terraform plan -out=tf.plan
+    - task: tfsec@1
+      displayName: 'Terraform security scan'
+      inputs:
+        dir: ${{ parameters.tfPath }}
+    
+- deployment: infra_cd
+  displayName: 'infra_cd'
+  environment: 'tf-layering'
+  dependsOn: 'infra_ci'
+  condition: succeeded('infra_ci')
+  strategy:
+    runOnce:
+      deploy:
+        steps:
+        - checkout: self     
+        - task: Bash@3
+          displayName: 'Terraform init'
+          name: 'terraform_init'
+          env:
+            ARM_CLIENT_ID: ${{ parameters.clientId }}
+            ARM_CLIENT_SECRET: ${{ parameters.clientSecret }}
+            ARM_TENANT_ID: ${{ parameters.tenantId }}
+            ARM_SUBSCRIPTION_ID: ${{ parameters.subscriptionId }}
+          inputs:
+            targetType: inline
+            workingDirectory: ${{ parameters.tfPath }}
+            failOnStderr: true
+            bashEnvValue: 
+            script: |
+              terraform init
+        - task: Bash@3
+          displayName: 'Terraform apply'
+          name: 'terraform_apply'
+          env:
+            ARM_CLIENT_ID: ${{ parameters.clientId }}
+            ARM_CLIENT_SECRET: ${{ parameters.clientSecret }}
+            ARM_TENANT_ID: ${{ parameters.tenantId }}
+            ARM_SUBSCRIPTION_ID: ${{ parameters.subscriptionId }}
+          inputs:
+            targetType: inline
+            workingDirectory: ${{ parameters.tfPath }}
+            failOnStderr: true
+            script: |
+              terraform apply -state=tf.plan -auto-approve

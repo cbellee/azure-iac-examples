@@ -1,0 +1,733 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.3.255.40792",
+      "templateHash": "2135000571496839808"
+    }
+  },
+  "parameters": {
+    "mySqlAdminUserName": {
+      "type": "string",
+      "defaultValue": "dbadmin"
+    },
+    "mySqlAdminPassword": {
+      "type": "string"
+    },
+    "hubVnetPeeringDeploymentName": {
+      "type": "string",
+      "defaultValue": "[format('hubVnetPeeringDeployment-{0}', utcNow())]"
+    },
+    "spokeVnetName": {
+      "type": "string",
+      "defaultValue": "spoke-vnet"
+    },
+    "spokeVnetAddressPrefix": {
+      "type": "string",
+      "defaultValue": "10.1.0.0/16"
+    },
+    "dockerRegistryUrl": {
+      "type": "string"
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {
+        "costcenter": "1234567890",
+        "environment": "dev"
+      }
+    },
+    "spokeSubnets": {
+      "type": "array",
+      "defaultValue": [
+        {
+          "name": "PrivateLink-Subnet",
+          "addressPrefix": "10.1.0.0/24",
+          "delegations": []
+        },
+        {
+          "name": "Database-Subnet",
+          "addressPrefix": "10.1.1.0/24",
+          "delegations": [
+            {
+              "name": "delegation",
+              "properties": {
+                "serviceName": "Microsoft.DBforMySQL/flexibleServers"
+              }
+            }
+          ]
+        },
+        {
+          "name": "AppService-Subnet",
+          "addressPrefix": "10.1.2.0/24",
+          "delegations": [
+            {
+              "name": "delegation",
+              "properties": {
+                "serviceName": "Microsoft.Web/serverfarms"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "skuName": {
+      "type": "string",
+      "defaultValue": "P1v2",
+      "allowedValues": [
+        "P1v2",
+        "P2v2",
+        "P3v2"
+      ]
+    },
+    "containerName": {
+      "type": "string"
+    },
+    "hubVnetId": {
+      "type": "string"
+    },
+    "hubVnetName": {
+      "type": "string"
+    },
+    "hubVnetResourceGroup": {
+      "type": "string"
+    }
+  },
+  "functions": [],
+  "variables": {
+    "suffix": "[uniqueString(resourceGroup().id)]",
+    "siteName": "[format('my-app-{0}', variables('suffix'))]",
+    "storageName": "[format('stor{0}', variables('suffix'))]",
+    "storagePrivateDNSZoneName": "privatelink.blob.core.windows.net",
+    "appSvcPrivateDNSZoneName": "azurewebsites.windows.net",
+    "mySqlPrivateDNSZoneName": "mysql.database.azure.com",
+    "serverFarmName": "[format('app-svc-{0}', variables('suffix'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
+      "apiVersion": "2020-08-01",
+      "name": "[format('{0}/peering-to-{1}', parameters('spokeVnetName'), parameters('hubVnetName'))]",
+      "properties": {
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": true,
+        "allowVirtualNetworkAccess": true,
+        "useRemoteGateways": false,
+        "remoteVirtualNetwork": {
+          "id": "[parameters('hubVnetId')]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2021-02-01",
+      "name": "[variables('storageName')]",
+      "tags": "[parameters('tags')]",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "accessTier": "Hot",
+        "allowBlobPublicAccess": true,
+        "networkAcls": {
+          "defaultAction": "Deny"
+        },
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2020-12-01",
+      "name": "[variables('serverFarmName')]",
+      "kind": "linux",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "[parameters('skuName')]",
+        "tier": "PremiumV2",
+        "size": "[parameters('skuName')]",
+        "family": "[parameters('skuName')]",
+        "capacity": 1
+      },
+      "properties": {
+        "reserved": true
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2020-06-01",
+      "name": "[variables('siteName')]",
+      "location": "[resourceGroup().location]",
+      "kind": "app,linux,container",
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('serverFarmName'))]",
+        "siteConfig": {
+          "linuxFxVersion": "[format('DOCKER|{0}', parameters('containerName'))]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('serverFarmName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/config",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/appsettings', variables('siteName'))]",
+      "properties": {
+        "WEBSITE_DNS_SERVER": "168.63.129.16",
+        "WEBSITE_VNET_ROUTE_ALL": "1",
+        "WEBSITES_ENABLE_APP_SERVICE_STORAGE": false,
+        "DOCKER_REGISTRY_SERVER_URL": "[parameters('dockerRegistryUrl')]",
+        "WEBSITE_PULL_IMAGE_OVER_VNET": true
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('siteName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/sites/networkConfig",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/VirtualNetwork', variables('siteName'))]",
+      "properties": {
+        "subnetResourceId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.vnetName.value, reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.subnetArray.value[2].name)]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName'))]",
+        "[resourceId('Microsoft.Web/sites', variables('siteName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2020-11-01",
+      "name": "blobPrivateEndpoint",
+      "location": "[resourceGroup().location]",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.vnetName.value, reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.subnetArray.value[0].name)]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "blobStorageConnection",
+            "properties": {
+              "groupIds": [
+                "blob"
+              ],
+              "privateLinkServiceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "apiVersion": "2020-11-01",
+      "name": "appSvcPrivateEndpoint",
+      "location": "[resourceGroup().location]",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "subnet": {
+          "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.vnetName.value, reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.subnetArray.value[0].name)]"
+        },
+        "privateLinkServiceConnections": [
+          {
+            "name": "appSvcConnection",
+            "properties": {
+              "privateLinkServiceId": "[resourceId('Microsoft.Web/sites', variables('siteName'))]",
+              "groupIds": [
+                "sites"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName'))]",
+        "[resourceId('Microsoft.Web/sites', variables('siteName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "[variables('storagePrivateDNSZoneName')]",
+      "location": "global",
+      "tags": "[parameters('tags')]",
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}-link', variables('storagePrivateDNSZoneName'), variables('storagePrivateDNSZoneName'))]",
+      "tags": "[parameters('tags')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.id.value]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', variables('storagePrivateDNSZoneName'))]",
+        "[resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "[variables('appSvcPrivateDNSZoneName')]",
+      "location": "global",
+      "tags": "[parameters('tags')]",
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}-link', variables('appSvcPrivateDNSZoneName'), variables('appSvcPrivateDNSZoneName'))]",
+      "tags": "[parameters('tags')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.id.value]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', variables('appSvcPrivateDNSZoneName'))]",
+        "[resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2020-11-01",
+      "name": "[format('{0}/dnsGroup1', 'appSvcPrivateEndpoint')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "config1",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('appSvcPrivateDNSZoneName'))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateEndpoints', 'appSvcPrivateEndpoint')]",
+        "[resourceId('Microsoft.Network/privateDnsZones', variables('appSvcPrivateDNSZoneName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+      "apiVersion": "2020-11-01",
+      "name": "[format('{0}/dnsGroup2', 'blobPrivateEndpoint')]",
+      "properties": {
+        "privateDnsZoneConfigs": [
+          {
+            "name": "config1",
+            "properties": {
+              "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('storagePrivateDNSZoneName'))]"
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateEndpoints', 'blobPrivateEndpoint')]",
+        "[resourceId('Microsoft.Network/privateDnsZones', variables('storagePrivateDNSZoneName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "apiVersion": "2020-06-01",
+      "name": "[variables('mySqlPrivateDNSZoneName')]",
+      "location": "global",
+      "tags": "[parameters('tags')]",
+      "properties": {}
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "apiVersion": "2020-06-01",
+      "name": "[format('{0}/{1}-link', variables('mySqlPrivateDNSZoneName'), variables('mySqlPrivateDNSZoneName'))]",
+      "tags": "[parameters('tags')]",
+      "location": "global",
+      "properties": {
+        "registrationEnabled": false,
+        "virtualNetwork": {
+          "id": "[reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.id.value]"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/privateDnsZones', variables('mySqlPrivateDNSZoneName'))]",
+        "[resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-10-01",
+      "name": "[parameters('spokeVnetName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "tags": {
+            "value": "[parameters('tags')]"
+          },
+          "vnetName": {
+            "value": "[parameters('spokeVnetName')]"
+          },
+          "subnets": {
+            "value": "[parameters('spokeSubnets')]"
+          },
+          "vnetAddressPrefix": {
+            "value": "[parameters('spokeVnetAddressPrefix')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.3.255.40792",
+              "templateHash": "16185097628804106595"
+            }
+          },
+          "parameters": {
+            "vnetName": {
+              "type": "string"
+            },
+            "vnetAddressPrefix": {
+              "type": "string"
+            },
+            "subnets": {
+              "type": "array"
+            },
+            "tags": {
+              "type": "object"
+            }
+          },
+          "functions": [],
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2020-06-01",
+              "name": "[parameters('vnetName')]",
+              "tags": "[parameters('tags')]",
+              "location": "[resourceGroup().location]",
+              "properties": {
+                "copy": [
+                  {
+                    "name": "subnets",
+                    "count": "[length(parameters('subnets'))]",
+                    "input": {
+                      "name": "[parameters('subnets')[copyIndex('subnets')].name]",
+                      "properties": {
+                        "addressPrefix": "[parameters('subnets')[copyIndex('subnets')].addressPrefix]",
+                        "privateEndpointNetworkPolicies": "Disabled",
+                        "delegations": "[if(equals(parameters('subnets')[copyIndex('subnets')].delegations, createArray()), null(), parameters('subnets')[copyIndex('subnets')].delegations)]"
+                      }
+                    }
+                  }
+                ],
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "[parameters('vnetAddressPrefix')]"
+                  ]
+                }
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]"
+            },
+            "subnetArray": {
+              "type": "array",
+              "value": "[reference(resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))).subnets]"
+            },
+            "vnetName": {
+              "type": "string",
+              "value": "[parameters('vnetName')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-10-01",
+      "name": "[parameters('hubVnetPeeringDeploymentName')]",
+      "resourceGroup": "[parameters('hubVnetResourceGroup')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "remoteVnetName": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.vnetName.value]"
+          },
+          "remoteVnetId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.id.value]"
+          },
+          "parentVnetName": {
+            "value": "[parameters('hubVnetName')]"
+          },
+          "useRemoteGateways": {
+            "value": false
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.3.255.40792",
+              "templateHash": "7966158060100262080"
+            }
+          },
+          "parameters": {
+            "parentVnetName": {
+              "type": "string"
+            },
+            "remoteVnetId": {
+              "type": "string"
+            },
+            "remoteVnetName": {
+              "type": "string"
+            },
+            "useRemoteGateways": {
+              "type": "bool",
+              "defaultValue": false
+            }
+          },
+          "functions": [],
+          "resources": [
+            {
+              "type": "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
+              "apiVersion": "2020-08-01",
+              "name": "[format('{0}/{1}', parameters('parentVnetName'), format('peering-to-{0}', parameters('remoteVnetName')))]",
+              "properties": {
+                "allowForwardedTraffic": true,
+                "allowGatewayTransit": true,
+                "allowVirtualNetworkAccess": true,
+                "useRemoteGateways": "[parameters('useRemoteGateways')]",
+                "remoteVirtualNetwork": {
+                  "id": "[parameters('remoteVnetId')]"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-10-01",
+      "name": "mySqlFlexServerDeployment",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[resourceGroup().location]"
+          },
+          "mySqlAdminUserName": {
+            "value": "[parameters('mySqlAdminUserName')]"
+          },
+          "mySqlAdminPassword": {
+            "value": "[parameters('mySqlAdminPassword')]"
+          },
+          "subnetArmResourceId": {
+            "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.vnetName.value, reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.subnetArray.value[1].name)]"
+          },
+          "suffix": {
+            "value": "[variables('suffix')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.3.255.40792",
+              "templateHash": "4646623173152848111"
+            }
+          },
+          "parameters": {
+            "mySqlAdminUserName": {
+              "type": "string",
+              "defaultValue": "dbadmin"
+            },
+            "mySqlAdminPassword": {
+              "type": "secureString"
+            },
+            "location": {
+              "type": "string"
+            },
+            "suffix": {
+              "type": "string"
+            },
+            "serverEdition": {
+              "type": "string",
+              "defaultValue": "GeneralPurpose"
+            },
+            "vCores": {
+              "type": "int",
+              "defaultValue": 2
+            },
+            "storageSizeMB": {
+              "type": "int",
+              "defaultValue": 10240
+            },
+            "haEnabled": {
+              "type": "string",
+              "defaultValue": "Enabled"
+            },
+            "availabilityZone": {
+              "type": "string",
+              "defaultValue": ""
+            },
+            "version": {
+              "type": "string",
+              "defaultValue": "8.0.21"
+            },
+            "subnetArmResourceId": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {
+                "costcenter": "1234567890",
+                "environment": "dev"
+              }
+            },
+            "backupRetentionDays": {
+              "type": "int",
+              "defaultValue": 7
+            },
+            "geoRedundantBackup": {
+              "type": "string",
+              "defaultValue": "Disabled"
+            },
+            "vmName": {
+              "type": "string",
+              "defaultValue": "Standard_D2ds_v4"
+            },
+            "publicNetworkAccess": {
+              "type": "string",
+              "defaultValue": "Disabled",
+              "metadata": {
+                "description": "Value should be either Enabled or Disabled"
+              }
+            },
+            "storageIops": {
+              "type": "int",
+              "defaultValue": 100
+            }
+          },
+          "functions": [],
+          "variables": {
+            "serverName": "[format('mysqlflex{0}', parameters('suffix'))]",
+            "firewallRuleName": "[format('{0}-fw-rules', variables('serverName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.DBforMySQL/flexibleServers",
+              "apiVersion": "2020-07-01-privatepreview",
+              "name": "[variables('serverName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "version": "[parameters('version')]",
+                "mySqlAdminUserName": "[parameters('mySqlAdminUserName')]",
+                "mySqlAdminPassword": "[parameters('mySqlAdminPassword')]",
+                "publicNetworkAccess": "[parameters('publicNetworkAccess')]",
+                "DelegatedSubnetArguments": {
+                  "subnetArmResourceId": "[parameters('subnetArmResourceId')]"
+                },
+                "haEnabled": "[parameters('haEnabled')]",
+                "storageProfile": {
+                  "storageMB": "[parameters('storageSizeMB')]",
+                  "backupRetentionDays": "[parameters('backupRetentionDays')]",
+                  "geoRedundantBackup": "[parameters('geoRedundantBackup')]",
+                  "storageIops": "[parameters('storageIops')]"
+                },
+                "availabilityZone": "[parameters('availabilityZone')]"
+              },
+              "sku": {
+                "name": "[parameters('vmName')]",
+                "tier": "[parameters('serverEdition')]",
+                "capacity": "[parameters('vCores')]"
+              },
+              "tags": "[parameters('tags')]"
+            },
+            {
+              "type": "Microsoft.DBForMySql/flexibleServers/firewallRules",
+              "apiVersion": "2020-07-01-preview",
+              "name": "[format('{0}/{1}', variables('serverName'), variables('firewallRuleName'))]",
+              "properties": {
+                "startIpAddress": "0.0.0.0",
+                "endIpAddress": "0.0.0.0"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DBforMySQL/flexibleServers', variables('serverName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "mySqlServerName": {
+              "type": "string",
+              "value": "[variables('serverName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "vnetName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.vnetName.value]"
+    },
+    "vnetId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', parameters('spokeVnetName')), '2019-10-01').outputs.id.value]"
+    },
+    "storageDnsZoneId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/privateDnsZones', variables('storagePrivateDNSZoneName'))]"
+    },
+    "webAppName": {
+      "type": "string",
+      "value": "[variables('siteName')]"
+    },
+    "webAppHostName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Web/sites', variables('siteName'))).defaultHostName]"
+    },
+    "webAppPrivateEndpointIpAddress": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Network/privateEndpoints', 'appSvcPrivateEndpoint')).customDnsConfigs[0].ipAddresses[0]]"
+    }
+  }
+}

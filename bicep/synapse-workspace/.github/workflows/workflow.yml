@@ -1,0 +1,46 @@
+name: 'synapse workflow'
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+permissions:
+      id-token: write
+      contents: read
+env:
+  location: 'australiaeast'
+  subscriptionId: 'b2375b5f-8dab-4436-b87c-32bc7fdce5d0'
+  resourceGroupName: 'synapse-rg'
+  adminGroupObjectId: 'f6a900e2-df11-43e7-ba3e-22be99d3cede'
+jobs:
+  dev-deployment:
+    name: 'Deploy Synapse Workspace'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 'Check out repository'
+        uses: actions/checkout@v3
+      - name: 'Azure Login'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: 'Deploy Synapse Workspace'
+        uses: azure/CLI@v1
+        with:
+          azcliversion: 2.30.0
+          inlineScript: |
+            az account set --subscription ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+            az group create --name ${{ env.resourceGroupName }} --location ${{ env.location }}
+
+            az deployment group create \
+              --name 'infra-deployment' \
+              --resource-group ${{ env.resourceGroupName }} \
+              --template-file ./infra/main.bicep \
+              --parameters ./infra/params.json \
+              --parameters location=${{ env.location }} \
+              --parameters administratorPassword=${{ secrets.ADMIN_PASSWORD }} \
+              --parameters synapseSqlAdminGroupObjectID=${{ secrets.ADMIN_GROUP_ID }}
+     

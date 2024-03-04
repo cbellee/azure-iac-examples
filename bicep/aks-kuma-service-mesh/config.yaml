@@ -1,0 +1,78 @@
+apiVersion: config.openservicemesh.io/v1alpha2
+kind: MeshConfig
+metadata:
+  annotations:
+    kubectl.kubernetes.io/last-applied-configuration: |
+      {"apiVersion":"config.openservicemesh.io/v1alpha2","kind":"MeshConfig","metadata":{"annotations":{},"creationTimestamp":"2023-03-01T03:29:36Z","generation":1,"name":"osm-mesh-config","namespace":"kube-system","resourceVersion":"1908","uid":"1e8d4997-96aa-41ad-94f2-93131802850a"},"spec":{"certificate":{"certKeyBitSize":2048,"ingressGateway":{"secret":{"name":"osm-nginx-client-cert","namespace":"kube-system"},"subjectAltNames":["ingress-nginx.ingress-nginx-osm.cluster.local"],"validityDuration":"24h"},"serviceCertValidityDuration":"24h"},"featureFlags":{"enableAsyncProxyServiceMapping":false,"enableEgressPolicy":true,"enableEnvoyActiveHealthChecks":false,"enableIngressBackendPolicy":true,"enableRetryPolicy":false,"enableSnapshotCacheMode":false,"enableWASMStats":true},"observability":{"enableDebugServer":true,"osmLogLevel":"info","tracing":{"enable":false}},"sidecar":{"configResyncInterval":"0s","enablePrivilegedInitContainer":false,"localProxyMode":"Localhost","logLevel":"error","resources":{},"tlsMaxProtocolVersion":"TLSv1_3","tlsMinProtocolVersion":"TLSv1_2"},"traffic":{"enableEgress":true,"enablePermissiveTrafficPolicyMode":true,"inboundExternalAuthorization":{"enable":false,"failureModeAllow":false,"statPrefix":"inboundExtAuthz","timeout":"1s"},"inboundPortExclusionList":[],"networkInterfaceExclusionList":[],"outboundIPRangeExclusionList":[],"outboundIPRangeInclusionList":[],"outboundPortExclusionList":[]}}}
+  creationTimestamp: "2023-03-01T03:29:36Z"
+  generation: 2
+  name: osm-mesh-config
+  namespace: kube-system
+  resourceVersion: "10857"
+  uid: 1e8d4997-96aa-41ad-94f2-93131802850a
+spec:
+  certificate:
+    certKeyBitSize: 2048
+    ingressGateway:
+      secret:
+        name: osm-nginx-client-cert
+        namespace: kube-system
+      subjectAltNames:
+      - ingress-nginx.ingress-nginx-osm.cluster.local
+      validityDuration: 24h
+    serviceCertValidityDuration: 24h
+  featureFlags:
+    enableAsyncProxyServiceMapping: false
+    enableEgressPolicy: true
+    enableEnvoyActiveHealthChecks: false
+    enableIngressBackendPolicy: true
+    enableRetryPolicy: false
+    enableSnapshotCacheMode: false
+    enableWASMStats: true
+  observability:
+    enableDebugServer: true
+    osmLogLevel: info
+    tracing:
+      enable: false
+  sidecar:
+    configResyncInterval: 0s
+    enablePrivilegedInitContainer: false
+    localProxyMode: Localhost
+    logLevel: error
+    resources: {}
+    tlsMaxProtocolVersion: TLSv1_3
+    tlsMinProtocolVersion: TLSv1_2
+  traffic:
+    enableEgress: true
+    enablePermissiveTrafficPolicyMode: true
+    inboundExternalAuthorization:
+      enable: false
+      failureModeAllow: false
+      statPrefix: inboundExtAuthz
+      timeout: 1s
+    inboundPortExclusionList: []
+    networkInterfaceExclusionList: []
+    outboundIPRangeExclusionList: []
+    outboundIPRangeInclusionList: []
+    outboundPortExclusionList: []
+[?1049h[22;0;0t[>4;2m[?1h=[?2004h[?25h[?12h[?12l[27m[23m[29m[m[H[2J[?25l[1;1H[34m# Please edit the object below. Lines beginning with a '#' will be ignored,
+# and an empty file will abort the edit. If an error occurs while saving this file will be
+# reopened with the relevant failures.
+#[m
+[36mapiVersion[m[35m:[m config.openservicemesh.io/v1alpha2
+[36mkind[m[35m:[m MeshConfig
+[36mmetadata[m[35m:[m
+  [36mannotations[m[35m:[m
+    [36mkubectl.kubernetes.io/last-applied-configuration[m[35m:[m |[10;7H[35m{[m[31m"apiVersion"[m[35m:[m[31m"config.openservicemesh.io/v1alpha2"[m,[31m"kind"[m[35m:[m[31m"MeshConfig"[m,[31m"metadata"[m[35m:{[m[31m"annotations"[m[35m:{}[m,[31m"creaa[11;1HtionTimestamp"[m[35m:[m[31m"2023-03-01T03:29:36Z"[m,[31m"generation"[m[35m:[m1,[31m"name"[m[35m:[m[31m"osm-mesh-config"[m,[31m"namespace"[m[35m:[m[31m"kube-system"[m,[31m"resourr[12;1HceVersion"[m[35m:[m[31m"1908"[m,[31m"uid"[m[35m:[m[31m"1e8d4997-96aa-41ad-94f2-93131802850a"[m[35m}[m,[31m"spec"[m[35m:{[m[31m"certificate"[m[35m:{[m[31m"certKeyBitSize"[m[35m:[m2048,[31m"ii[13;1HngressGateway"[m[35m:{[m[31m"secret"[m[35m:{[m[31m"name"[m[35m:[m[31m"osm-nginx-client-cert"[m,[31m"namespace"[m[35m:[m[31m"kube-system"[m[35m}[m,[31m"subjectAltNames"[m[35m:[[m[31m"ingresss[14;1H-nginx.ingress-nginx-osm.cluster.local"[m[35m][m,[31m"validityDuration"[m[35m:[m[31m"24h"[m[35m}[m,[31m"serviceCertValidityDuration"[m[35m:[m[31m"24h"[m[35m}[m,[31m"featurr[15;1HeFlags"[m[35m:{[m[31m"enableAsyncProxyServiceMapping"[m[35m:[m[31mfalse[m,[31m"enableEgressPolicy"[m[35m:[m[31mtrue[m,[31m"enableEnvoyActiveHealthChecks"[m[35m:[m[31mfalsee[m[16;1H,[31m"enableIngressBackendPolicy"[m[35m:[m[31mtrue[m,[31m"enableRetryPolicy"[m[35m:[m[31mfalse[m,[31m"enableSnapshotCacheMode"[m[35m:[m[31mfalse[m,[31m"enableWASMStats"[m[35m::[m[17;1H[31mtrue[m[35m}[m,[31m"observability"[m[35m:{[m[31m"enableDebugServer"[m[35m:[m[31mtrue[m,[31m"osmLogLevel"[m[35m:[m[31m"info"[m,[31m"tracing"[m[35m:{[m[31m"enable"[m[35m:[m[31mfalse[m[35m}}[m,[31m"sidecar"[m[35m:{[m[31m"coo[18;1HnfigResyncInterval"[m[35m:[m[31m"0s"[m,[31m"enablePrivilegedInitContainer"[m[35m:[m[31mfalse[m,[31m"localProxyMode"[m[35m:[m[31m"Localhost"[m,[31m"logLevel"[m[35m:[m[31m"error"[m,,[19;1H[31m"resources"[m[35m:{}[m,[31m"tlsMaxProtocolVersion"[m[35m:[m[31m"TLSv1_3"[m,[31m"tlsMinProtocolVersion"[m[35m:[m[31m"TLSv1_2"[m[35m}[m,[31m"traffic"[m[35m:{[m[31m"enableEgress"[m[35m:[m[31mtt[20;1Hrue[m,[31m"enablePermissiveTrafficPolicyMode"[m[35m:[m[31mtrue[m,[31m"inboundExternalAuthorization"[m[35m:{[m[31m"enable"[m[35m:[m[31mfalse[m,[31m"failureModeAllow"[m[35m::[m[21;1H[31mfalse[m,[31m"statPrefix"[m[35m:[m[31m"inboundExtAuthz"[m,[31m"timeout"[m[35m:[m[31m"1s"[m[35m}[m,[31m"inboundPortExclusionList"[m[35m:[][m,[31m"networkInterfaceExclusionLii[22;1Hst"[m[35m:[][m,[31m"outboundIPRangeExclusionList"[m[35m:[][m,[31m"outboundIPRangeInclusionList"[m[35m:[][m,[31m"outboundPortExclusionList"[m[35m:[]}}}[m
+  [36mcreationTimestamp[m[35m:[m [31m"2023-03-01T03:29:36Z"[m
+  [36mgeneration[m[35m:[m [31m2[m
+  [36mname[m[35m:[m osm-mesh-config
+  [36mnamespace[m[35m:[m kube-system
+  [36mresourceVersion[m[35m:[m [31m"10857"[m
+  [36muid[m[35m:[m 1e8d4997-96aa-41ad-94f2-93131802850a
+[36mspec[m[35m:[m
+  [36mcertificate[m[35m:[m
+    [36mcertKeyBitSize[m[35m:[m [31m2048[m
+    [36mingressGateway[m[35m:[m[33;94H3,1[11CTop[3;1H[?25h[?25l[?25h[33;1H[?2004l[?1l>[>4;m[?1049l[23;0;0tVim: Caught deadly signal TERM
+Vim: Finished.
+[33;1H[23;2t[23;1t

@@ -1,0 +1,25 @@
+apiVersion: alb.networking.azure.io/v1
+kind: BackendTLSPolicy
+metadata:
+  name: mtls-app-tls-policy
+  namespace: backend-mtls
+spec:
+  targetRef:
+    group: ""
+    kind: Service
+    name: mtls-app
+    namespace: backend-mtls
+  default:
+    sni: backend.com
+    ports:
+    - port: 443
+    clientCertificateRef:
+      name: gateway-client-cert
+      group: ""
+      kind: Secret
+    verify:
+      caCertificateRef:
+        name: ca.bundle
+        group: ""
+        kind: Secret
+      subjectAltName: backend.com
