@@ -25,6 +25,25 @@ jobs:
     - checkout: self 
 
     - task: AzureCLI@2
+      name: 'WhatifInfrastructureTask'
+      displayName: 'Whatif Infrastructure Task'
+      enabled: true
+      inputs:
+        azureSubscription: ${{ parameters.azureServiceConnection }}
+        scriptLocation: inlineScript
+        scriptType: bash
+        inlineScript: |
+          WHATIF_RESULT=$(az deployment sub create \
+            --name $(deploymentName) \
+            --location ${{ parameters.location }} \
+            --template-file ./main.bicep \
+            --parameters location=${{ parameters.location }} prefix=${{ parameters.prefix }} \
+            --whatif \
+            --output json)
+
+          echo $WHATIF_RESULT | jq
+
+    - task: AzureCLI@2
       name: 'ProvisionInfrastructureTask'
       displayName: 'Provision Infrastructure Task'
       enabled: true
