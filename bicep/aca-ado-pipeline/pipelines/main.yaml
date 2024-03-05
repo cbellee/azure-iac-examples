@@ -18,6 +18,10 @@ variables:
     value: '80'
   - name: colour
     value: 'blue'
+  - name: minReplicas
+    value: 2
+  - name: maxReplicas
+    value : 6
 
 stages:
   - stage: InfraDeploymentStage
@@ -54,5 +58,7 @@ stages:
           containerPort: $(containerPort)
           vmImageName: $(vmImageName)
           colour: $(colour)
-          minReplicas: 2
-          maxReplicas: 6
+          location: $(location)
+          minReplicas: $(minReplicas)
+          maxReplicas: $(maxReplicas)
+          prefix: $(prefix)

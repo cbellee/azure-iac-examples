@@ -27,7 +27,7 @@ module wks './modules/wks.bicep' = {
   }
 }
 
-module appEnv 'modules/appEnvironment.bicep' = {
+module appEnv './modules/appEnvironment.bicep' = {
   name: 'module-containerenv-${location}'
   scope: resourceGroup
   params: {
@@ -50,6 +50,7 @@ module acrPullUmid 'modules/umid.bicep' = {
 
 output resourceGroupName string = resourceGroup.name
 output acaEnvironmentName string = appEnv.outputs.name
+output acaEnvironmentId string = appEnv.outputs.id
 output location string = location
 output acrName string = acr.outputs.name
 output umidName string = acrPullUmid.outputs.name

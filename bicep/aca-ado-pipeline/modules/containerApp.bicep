@@ -1,26 +1,41 @@
 param location string
 param imageName string
 param environmentId string
-param targetPort int = 80
+param targetPort int
 param prefix string
 param colour string
 param imageTag string
+param umidId string
+param acrName string
 
 var suffix = uniqueString(resourceGroup().id)
 var name = '${prefix}-app-${suffix}'
 var imageNameAndTag = '${imageName}:${imageTag}'
 
+resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' existing = {
+  name: acrName
+}
+
 resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
   name: name
   location: location
   identity: {
-    type: 'None'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${umidId}': {}
+    }
   }
   properties: {
     workloadProfileName: null
     environmentId: environmentId
     configuration: {
-      activeRevisionsMode: 'Single'
+      registries: [
+        {
+          identity: umidId
+          server: acr.name
+        }
+      ]
+      activeRevisionsMode: 'Multiple'
       ingress: {
         external: true
         targetPort: targetPort
@@ -114,7 +129,8 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
         }
       ]
       scale: {
-        maxReplicas: 10
+        minReplicas: 2
+        maxReplicas: 6
       }
     }
   }

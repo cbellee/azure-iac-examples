@@ -27,4 +27,3 @@ output name string = wks.name
 output id string = wks.id
 output customerId string = wks.properties.customerId
 output apiVersion string = wks.apiVersion
-output sharedKey string = listKeys(wks.id, wks.apiVersion).primarySharedKey

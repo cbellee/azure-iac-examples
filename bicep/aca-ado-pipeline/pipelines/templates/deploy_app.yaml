@@ -1,7 +1,11 @@
 parameters:
    - name: azureServiceConnection
      type: string
+   - name: location
+     type: string
    - name: appName
+     type: string
+   - name: prefix
      type: string
    - name: containerPort
      type: string
@@ -27,8 +31,12 @@ jobs:
       value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.acrName']]
     - name: acaEnvironmentName
       value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.acaEnvironmentName']]
+    - name: acaEnvironmentId
+      value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.acaEnvironmentId']]
     - name: umidId
       value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.umidId']]
+    - name: umidName
+      value: $[stageDependencies.InfraDeploymentStage.InfraProvisionJob.outputs['GetDeploymentOutputs.umidName']]
 
     pool:
       vmImage: ${{ parameters.vmImageName }}
@@ -44,17 +52,16 @@ jobs:
         scriptType: bash
         scriptLocation: inlineScript
         inlineScript: |
-          az containerapp create \
-            --name ${{ parameters.appName }} \
-            --image "$(acrName).azurecr.io/${{ parameters.appName }}:${{ parameters.tag }}" \
-            --ingress external \
-            --user-assigned $(umidId) \
-            --registry-identity $(umidId) \
-            --registry-server "$(acrName).azurecr.io" \
+          az deployment group create \
+            --name 'app-deployment' \
             --resource-group $(resourceGroupName) \
-            --environment $(acaEnvironmentName) \
-            --target-port ${{ parameters.containerPort }} \
-            --env-vars COLOUR=${{ parameters.colour }} VERSION=${{ parameters.tag }} \
-            --min-replicas ${{ parameters.minReplicas }} \
-            --max-replicas ${{ parameters.maxReplicas }} \
-            --revisions-mode 'multiple'
+            --template-file ./modules/containerApp.bicep \
+            --parameters location=$(location) \
+            --parameters environmentId=$(acaEnvironmentId) \
+            --parameters targetPort=${{ parameters.containerPort }} \
+            --parameters colour=$(colour) \
+            --parameters prefix=$(prefix) \
+            --parameters imageName="$(acrName).azurecr.io/${{ parameters.appName }}" \
+            --parameters imageTag="${{ parameters.tag }}" \
+            --parameters umidId=$(umidId) \
+            --parameters acrName="$(acrName).azurecr.io"

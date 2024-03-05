@@ -24,29 +24,52 @@ jobs:
 
     - checkout: self 
 
+    - script: |
+        az bicep build --file ./main.bicep
+      name: LintBicepTemplate
+      displayName: 'Lint Bicep Template'
+
     - task: AzureCLI@2
-      name: 'WhatifInfrastructureTask'
-      displayName: 'Whatif Infrastructure Task'
+      name: 'ValidateInfrastructureTask'
+      displayName: 'Validate Infrastructure Task'
       enabled: true
+      continueOnError: false
       inputs:
         azureSubscription: ${{ parameters.azureServiceConnection }}
         scriptLocation: inlineScript
         scriptType: bash
         inlineScript: |
-          WHATIF_RESULT=$(az deployment sub create \
+          az deployment sub validate \
             --name $(deploymentName) \
             --location ${{ parameters.location }} \
             --template-file ./main.bicep \
-            --parameters location=${{ parameters.location }} prefix=${{ parameters.prefix }} \
-            --whatif \
-            --output json)
+            --parameters location=${{ parameters.location }} prefix=${{ parameters.prefix }}
 
-          echo $WHATIF_RESULT | jq
+    - task: AzureCLI@2
+      name: 'WhatifInfrastructureTask'
+      displayName: 'Whatif Infrastructure Task'
+      enabled: true
+      continueOnError:  false
+      inputs:
+        azureSubscription: ${{ parameters.azureServiceConnection }}
+        scriptLocation: inlineScript
+        scriptType: pscore
+        inlineScript: |
+          $result=$(az deployment sub what-if `
+            --name $(deploymentName) `
+            --location ${{ parameters.location }} `
+            --template-file ./main.bicep `
+            --parameters location=${{ parameters.location }} prefix=${{ parameters.prefix }} `
+            --no-pretty-print `
+            --output json | ConvertFrom-Json)
+
+          $result.changes.delta
 
     - task: AzureCLI@2
       name: 'ProvisionInfrastructureTask'
       displayName: 'Provision Infrastructure Task'
       enabled: true
+      continueOnError: false
       inputs:
         azureSubscription: ${{ parameters.azureServiceConnection }}
         scriptLocation: inlineScript
@@ -62,6 +85,7 @@ jobs:
       name: 'GetDeploymentOutputs'
       displayName: 'Get Deployment Outputs'
       enabled: true
+      continueOnError: false
       inputs:
         azureSubscription: ${{ parameters.azureServiceConnection }}
         scriptLocation: inlineScript
@@ -72,14 +96,17 @@ jobs:
           acrName=$(echo $OUTPUT | jq -r '.acrName.value')
           resourceGroupName=$(echo $OUTPUT | jq -r '.resourceGroupName.value')
           acaEnvironmentName=$(echo $OUTPUT | jq -r '.acaEnvironmentName.value')
+          acaEnvironmentId=$(echo $OUTPUT | jq -r '.acaEnvironmentId.value')
           umidId=$(echo $OUTPUT | jq -r '.umidId.value')
 
           echo "acrName: $acrName"
           echo "resourceGroupName: $resourceGroupName"
           echo "acaEnvironmentName: $acaEnvironmentName"
+          echo "acaEnvironmentId: $acaEnvironmentId"
           echo "umidId: $umidId"
 
           echo "##vso[task.setvariable variable=resourceGroupName;isOutput=true;]$resourceGroupName"
           echo "##vso[task.setvariable variable=acrName;isOutput=true;]$acrName"
           echo "##vso[task.setvariable variable=acaEnvironmentName;isOutput=true;]$acaEnvironmentName"
+          echo "##vso[task.setvariable variable=acaEnvironmentId;isOutput=true;]$acaEnvironmentId"
           echo "##vso[task.setvariable variable=umidId;isOutput=true;]$umidId"
