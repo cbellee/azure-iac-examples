@@ -1,0 +1,31 @@
+<policies>
+    <inbound>
+        <base />
+        <validate-jwt header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized. Access token is missing or invalid.">
+            <openid-config url="https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration" />
+            {3}
+        </validate-jwt>
+        <set-variable name="tenantName" value="@((string)context.Request.Headers.GetValueOrDefault("Authorization","").AsJwt()?.Claims["upn"].FirstOrDefault().Split('@').Last())" />
+        <trace source="Tenant Name" severity="verbose">
+            <message>@((string)context.Variables["tenantName"])</message>
+            <metadata name="JWT Authorization" value="JWT Tenant Name" />
+        </trace>
+        <choose>
+            <when condition="@((string)context.Variables["tenantName"] == "{0}")">
+                <set-backend-service base-url="https://{1}" />
+            </when>
+            <otherwise>
+                <set-backend-service base-url="https://{2}" />
+            </otherwise>
+        </choose>
+    </inbound>
+    <backend>
+        <forward-request />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>
