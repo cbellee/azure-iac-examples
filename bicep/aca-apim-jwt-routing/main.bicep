@@ -7,8 +7,6 @@ param publisherEmail string = 'me@home.net'
 param publisherName string = 'me'
 param addressPrefix string = '10.1.0.0/16'
 param version string
-param sshPublicKey string
-param deployVm bool = false
 param betaTenantName string
 param validIssuers string
 
@@ -204,16 +202,6 @@ module bastion 'modules/bastion.bicep' = {
     location: location
     vnetId: vnet.id
     subnetId: vnet.properties.subnets[4].id
-  }
-}
-
-module vm 'modules/vm.bicep' = if (deployVm) {
-  name: 'vm-module'
-  params: {
-    location: location
-    sshPublicKey: sshPublicKey
-    subnetId: vnet.properties.subnets[3].id
-    userName: 'adminUser'
   }
 }
 

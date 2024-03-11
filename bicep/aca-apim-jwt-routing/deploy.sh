@@ -1,9 +1,12 @@
+#### NOTE #################
+# replace '<your_first_tenant_id>' & '<your_second_tenant_id>' placeholders with the Azure EntraID tenant GUIDs
+# replace '<your_first_tenant_name>' with the name of your first tenant Id
+
 location='australiaeast'
 rgName="appgwy-apim-aca-jwt-routing-rg"
 currentUser=$(az ad signed-in-user show --query id -o tsv)
 tenantId=$(az account show --query homeTenantId -o tsv)
-sshPublicKey="$(cat ~/.ssh/id_rsa.pub)"
-betaTenantName='<your_beta_tenant_name>'
+betaTenantName='<your_first_tenant_name>'
 
 # create resource group
 az group create --location $location --name $rgName
@@ -29,7 +32,6 @@ az deployment group create \
     --parameters containerImageName="$acrName.azurecr.io/colourapp" \
     --parameters containerImageTag='latest' \
     --parameters version='0.1.0' \
-    --parameters sshPublicKey="$sshPublicKey" \
     --parameters betaTenantName=$betaTenantName \
     --parameters validIssuers='<issuers><issuer>https://sts.windows.net/<your_first_tenant_id>/</issuer><issuer>https://sts.windows.net/<your_second_tenant_id>/</issuer></issuers>'
 
