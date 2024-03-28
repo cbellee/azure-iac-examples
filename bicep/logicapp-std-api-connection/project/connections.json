@@ -1,0 +1,28 @@
+{
+    "managedApiConnections": {
+        "azureblob": {
+            "api": {
+                "id": "/subscriptions/@{appsetting('workflow_subscription_id')}/providers/Microsoft.Web/locations/@{appsetting('workflow_location')}/managedApis/azureblob"
+            },
+            "authentication": {
+                "type": "ManagedServiceIdentity"
+            },
+            "connection": {
+                "id": "/subscriptions/@{appsetting('workflow_subscription_id')}/resourceGroups/@{appsetting('workflow_rg_name')}/providers/Microsoft.Web/connections/@{appsetting('api_connection_name')}"
+            },
+            "connectionRuntimeUrl": "@{appsetting('azureblob_connection_runtime_url')}"
+        }
+    },
+    "serviceProviderConnections": {
+        "azurequeues": {
+            "displayName": "queue-cxn-1",
+            "parameterSetName": "connectionString",
+            "parameterValues": {
+                "connectionString": "@{appsetting('azurequeues_connection_string')}"
+            },
+            "serviceProvider": {
+                "id": "/serviceProviders/azurequeues"
+            }
+        }
+    }
+}

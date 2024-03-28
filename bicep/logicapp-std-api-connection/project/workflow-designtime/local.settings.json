@@ -1,0 +1,9 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsSecretStorageType": "Files",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "APP_KIND": "workflowapp",
+    "ProjectDirectoryPath": "c:\\Users\\cbellee\\repos\\github.com\\cbellee\\azure-iac-examples\\bicep\\logicapp-std-api-connection\\project"
+  }
+}

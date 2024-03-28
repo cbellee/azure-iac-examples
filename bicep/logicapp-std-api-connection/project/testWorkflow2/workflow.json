@@ -1,0 +1,54 @@
+{
+  "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "actions": {
+          "For_each": {
+              "actions": {
+                  "Add_a_message_to_queue": {
+                      "inputs": {
+                          "parameters": {
+                              "message": "@items('For_each')?['Path']",
+                              "queueName": "@appsettings('queue_name')"
+                          },
+                          "serviceProviderConfiguration": {
+                              "connectionName": "azurequeues",
+                              "operationId": "putMessage",
+                              "serviceProviderId": "/serviceProviders/azurequeues"
+                          }
+                      },
+                      "type": "ServiceProvider"
+                  }
+              },
+              "foreach": "@triggerBody()",
+              "runAfter": {},
+              "type": "foreach"
+          }
+      },
+      "contentVersion": "1.0.0.0",
+      "outputs": {},
+      "triggers": {
+          "When_a_blob_is_added_or_modified_(properties_only)_(V2)": {
+              "inputs": {
+                  "host": {
+                      "connection": {
+                          "referenceName": "azureblob"
+                      }
+                  },
+                  "method": "get",
+                  "path": "/v2/datasets/@{encodeURIComponent(encodeURIComponent('sa2viuqv5cncbqnm'))}/triggers/batch/onupdatedfile",
+                  "queries": {
+                      "checkBothCreatedAndModifiedDateTime": false,
+                      "folderId": "mycontainer2",
+                      "maxFileCount": 10
+                  }
+              },
+              "recurrence": {
+                  "frequency": "Minute",
+                  "interval": 1
+              },
+              "type": "ApiConnection"
+          }
+      }
+  },
+  "kind": "Stateless"
+}
