@@ -185,7 +185,7 @@ resource applicationGateway 'Microsoft.Network/applicationGateways@2023-09-01' =
         name: 'backend-probe'
         properties: {
           protocol: 'Http'
-          path: '/'
+          path: '/livez'
           interval: 30
           timeout: 30
           unhealthyThreshold: 3
