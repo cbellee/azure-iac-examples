@@ -157,22 +157,7 @@ EOF
 
 # log onto VM
 # curl http://gateway.test.internal
-# you should receive the 'blue' page (response snippet below)
+# you should receive the 'blue' page
 
-##########################################################################
-# localadmin@mgmt-vm:~$ curl http://gateway.test.internal
-# <html class="blue">
-
-# <head>
-# </head>
-
-# <body style="background-color: blue;color: #cccccc;font-family: arial;">
-#     <div>
-#         <h1>blue deployment</h1>
-#         <div>
-#             <p>Location: australiaeast</p>
-#         </div>
-#         <div>
-#             <p>HostName: colour-8696b995c5-d4jt5</p>
-#        ...
-##########################################################################
+# Now, in the Azure portal, change the App Gateway rule to point to the 'green-pool' backend pool
+# Then curl http://gateway.test.internal & you should receive the 'green' page
