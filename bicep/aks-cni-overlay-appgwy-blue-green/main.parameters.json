@@ -1,0 +1,69 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "value": null
+        },
+        "tags": {
+            "value": {
+                "costcentre": "123456789"
+            }
+        },
+        "adminGroupObjectID": {
+            "value": null
+        },
+        "aksVersion": {
+            "value": null
+        },
+        "vmSku": {
+            "value": "Standard_D4ds_v5"
+        },
+        "sshPublicKey": {
+            "value": null
+        },
+        "addressPrefix": {
+            "value": "10.0.0.0/16"
+        },
+        "subnets": {
+            "value": [
+                {
+                    "name": "aks-blue-system-subnet",
+                    "addressPrefix": "10.0.0.0/24"
+                },
+                {
+                    "name": "aks-blue-user-subnet",
+                    "addressPrefix": "10.0.1.0/24"
+                },
+                {
+                    "name": "aks-green-system-subnet",
+                    "addressPrefix": "10.0.2.0/24"
+                },
+                {
+                    "name": "aks-green-user-subnet",
+                    "addressPrefix": "10.0.3.0/24"
+                },
+                {
+                    "name": "ApplicationGatewaySubnet",
+                    "addressPrefix": "10.0.4.0/24"
+                },
+                {
+                    "name": "aks-lb-subnet",
+                    "addressPrefix": "10.0.5.0/24"
+                },
+                {
+                    "name": "app-gwy-private-ip-subnet",
+                    "addressPrefix": "10.0.6.0/24"
+                },
+                {
+                    "name": "AzureBastionSubnet",
+                    "addressPrefix": "10.0.7.0/24"
+                },
+                {
+                    "name": "mgmt-subnet",
+                    "addressPrefix": "10.0.8.0/24"
+                }
+            ]
+        }
+    }
+}

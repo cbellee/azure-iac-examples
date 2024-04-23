@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: colour
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: colour
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: colour
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: colour
+  template:
+    metadata:
+      labels:
+        app: colour
+    spec:
+      nodeSelector:
+        "kubernetes.io/os": linux
+      containers:
+      - name: colour
+        image: ${IMAGE_NAME}
+        ports:
+        - containerPort: 80
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        env:
+          - name: VERSION
+            value: ${VERSION}
+          - name: COLOUR
+            value: ${COLOUR}
+          - name: LOCATION
+            value: ${LOCATION}

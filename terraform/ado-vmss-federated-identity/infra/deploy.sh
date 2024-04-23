@@ -6,32 +6,37 @@ UMID_NAME='dev-ado-umid'
 VMSS_IMAGE_NAME='Ubuntu2204'
 ADO_PROJECT_NAME='Terraform AKS Federated Identity'
 ADO_SERVICE_CONNECTION_NAME='tf-aks-ado-service-cxn-2'
-SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+SUBSCRIPTION_ID="b2375b5f-8dab-4436-b87c-32bc7fdce5d0"
 SUBSCRIPTION_NAME=$(az account show --query name -o tsv)
 TENANT_ID=$(az account show --query tenantId -o tsv)
 BACKEND_STORAGE_ACCOUNT_RG='tf-state-rg'
+STORAGE_ACCOUNT_NAME='tfstatestorcbellee452023'
+AAD_AKS_ADMIN_GROUP_ID=$(az ad group show -g aks-admin-group --query id -o tsv)
 
 # add these vars to ./env file before running this script
 # AAD_AKS_ADMIN_GROUP_ID=<your AAD group Object Id>
 # ADO_ORG_ID=<your ADO org GUID>
 # ADO_ORG_URL=https://dev.azure.com/<your ADO org name>
 
-source ./.env 
+source ../.env 
 
 ISSUER="https://vstoken.dev.azure.com/$ADO_ORG_ID"
 SUBJECT="sc://kainidev/$ADO_PROJECT_NAME/$ADO_SERVICE_CONNECTION_NAME"
 AUDIENCE='api://AzureADTokenExchange'
 
+az login
 az account set -s $SUBSCRIPTION_ID
 az group create --name $RG_NAME --location $LOCATION
 
-BACKEND_STORAGE_ACCOUNT_ID=$(az storage account list --resource-group $BACKEND_STORAGE_ACCOUNT_RG --query [].id -o tsv)
-UMID_CLIENT_ID=$(az identity create --name $UMID_NAME --resource-group $RG_NAME --query id --output tsv)
+BACKEND_STORAGE_ACCOUNT_ID=$(az storage account show --resource-group $BACKEND_STORAGE_ACCOUNT_RG --name $STORAGE_ACCOUNT_NAME --query id -o tsv)
+UMID_CLIENT_RESOURCE_ID=$(az identity create --name $UMID_NAME --resource-group $RG_NAME --query id --output tsv)
 
 sleep 10
 
 UMID_PRINCIPAL_ID=$(az identity show -n $UMID_NAME -g $RG_NAME --query principalId --out tsv)
-az role assignment create --assignee $UMID_PRINCIPAL_ID --role 'Owner' --scope $BACKEND_STORAGE_ACCOUNT_ID
+UMID_CLIENT_ID=$(az identity show -n $UMID_NAME -g $RG_NAME --query clientId --out tsv)
+az role assignment create --assignee $UMID_PRINCIPAL_ID --role 'Owner' --scope "$BACKEND_STORAGE_ACCOUNT_ID"
+az role assignment create --assignee $UMID_PRINCIPAL_ID --role 'Owner' --scope "/subscriptions/$SUBSCRIPTION_ID"
 
 az devops project create \
     --name "$ADO_PROJECT_NAME" \
@@ -54,9 +59,9 @@ az identity federated-credential create \
     --identity-name $UMID_NAME \
     --name fed-cred \
     --resource-group $RG_NAME \
-    --audiences $AUDIENCE \
-    --issuer $ISSUER \
-    --subject $SUBJECT
+    --audiences "$AUDIENCE" \
+    --issuer "$ISSUER" \
+    --subject "$SUBJECT"
 
 az network vnet create \
     --name $VNET_NAME \
@@ -109,7 +114,7 @@ az aks create \
     --node-osdisk-size 100 \
     --enable-aad \
     --enable-azure-rbac \
-    --aad-admin-group-object-ids $AAD_AKS_ADMIN_GROUP_ID \
+    --aad-admin-group-object-ids "$AAD_AKS_ADMIN_GROUP_ID" \
     --aad-tenant-id $TENANT_ID \
     --enable-addons azure-policy \
     --network-plugin azure \
@@ -155,7 +160,7 @@ az vmss create \
     --single-placement-group false \
     --platform-fault-domain-count 1 \
     --load-balancer "" \
-    --assign-identity $UMID_CLIENT_ID \
+    --assign-identity $UMID_CLIENT_RESOURCE_ID \
     --ssh-key-values ~/.ssh/id_rsa.pub \
     --custom-data cloud-init
 
@@ -174,10 +179,3 @@ az network bastion ssh \
     --target-resource-id $FIRST_VMSS_INSTANCE \
     --ssh-key ~/.ssh/id_rsa
 
-# run the following commands within the remote SSH session on the VMSS instance
-# install pre-requisite tools on vmss instance
-wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-sudo apt update && sudo apt install terraform
-curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-sudo az aks install-cli

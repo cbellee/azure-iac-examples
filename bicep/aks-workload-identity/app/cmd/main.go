@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"log/slog"
@@ -38,6 +39,9 @@ func main() {
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Secret Value: %s", *secret.Value)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(*secret.Value)
 	})
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
