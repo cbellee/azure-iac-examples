@@ -4,11 +4,16 @@ K8S_VERSION='1.28.5'
 PREFIX='aks-cni-overlay'
 RG_NAME="aks-appgw-cni-overlay-blue-green-rg"
 SSH_KEY=$(cat ~/.ssh/id_rsa.pub)
-ADMIN_GROUP_OBJECT_ID='f6a900e2-df11-43e7-ba3e-22be99d3cede'
+AKS_ADMIN_GROUP_NAME='aks-admin-group'
 NGINX_INGRESS_NAMESPACE='ingress-nginx'
 NGINX_INGRESS_SERVICE='ingress-nginx'
 APP_NAMESPACE='test'
 BACKEND_HOST_NAME='aks.test.internal'
+
+# create AKS administrator group & add the current user to it
+CURRENT_USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
+az ad group create --display-name $AKS_ADMIN_GROUP_NAME --mail-nickname $AKS_ADMIN_GROUP_NAME
+az ad group member add --group $AKS_ADMIN_GROUP_NAME --member-id $CURRENT_USER_OBJECT_ID
 
 # create resource group
 az group create --location $LOCATION --name $RG_NAME
@@ -154,10 +159,3 @@ spec:
               port:
                 number: 80
 EOF
-
-# log onto VM
-# curl http://gateway.test.internal
-# you should receive the 'blue' page
-
-# Now, in the Azure portal, change the App Gateway rule to point to the 'green-pool' backend pool
-# Then curl http://gateway.test.internal & you should receive the 'green' page
