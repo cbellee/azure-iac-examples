@@ -36,7 +36,7 @@ param aksMaxNodeCount int = 10
 param aksNodeVMSize string = 'Standard_D4s_v3'
 
 @description('The version of Kubernetes.')
-param aksVersion string = '1.19.9'
+param aksVersion string
 
 @description('A CIDR notation IP range from which to assign service cluster IPs.')
 param aksServiceCIDR string = '10.100.0.0/16'

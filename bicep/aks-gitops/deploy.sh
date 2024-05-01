@@ -7,7 +7,7 @@ ADMIN_GROUP_OBJECT_ID="f6a900e2-df11-43e7-ba3e-22be99d3cede"
 for e in "${ENVIRONMENTS[@]}"
 do
     echo "deploying environment: $e"
-    RG_NAME="aks-gitops-$e-rg"
+    RG_NAME="aks-flux-gitops-$e-rg"
 
     az group create --location $LOCATION --name $RG_NAME
 
@@ -26,3 +26,8 @@ do
     az aks get-credentials -g $RG_NAME -n $CLUSTER_NAME --admin --overwrite-existing --context "aks-gitops-$e"
 done
 
+az aks get-credentials --resource-group aks-flux-gitops-staging-rg --name aks-staging --file gitops-staging --admin
+az aks get-credentials --resource-group aks-flux-gitops-production-rg --name aks-production --file gitops-production --admin
+
+KUBECONFIG=gitops-staging kubectl describe po -n podinfo | grep ghcr.io/stefanprodan/podinfo
+KUBECONFIG=gitops-production kubectl describe po -n podinfo | grep ghcr.io/stefanprodan/podinfo

@@ -7,7 +7,7 @@ param gitRepoUrl string
 ])
 param environmentName string
 
-resource aks 'Microsoft.ContainerService/managedClusters@2023-08-02-preview' existing = {
+resource aks 'Microsoft.ContainerService/managedClusters@2024-01-02-preview' existing = {
   name: aksClusterName
 }
 
@@ -33,8 +33,8 @@ resource fluxConfig 'Microsoft.KubernetesConfiguration/fluxConfigurations@2023-0
     suspend: false
     gitRepository: {
       url: gitRepoUrl
-      timeoutInSeconds: 600
-      syncIntervalInSeconds: 600
+      timeoutInSeconds: 240
+      syncIntervalInSeconds: 60
       repositoryRef: {
         branch: 'main'
       }
@@ -44,10 +44,18 @@ resource fluxConfig 'Microsoft.KubernetesConfiguration/fluxConfigurations@2023-0
       'infra': {
         path: './infrastructure'
         syncIntervalInSeconds: 120
+        force: true
+        prune: true
+        retryIntervalInSeconds: 30
+        timeoutInSeconds: 240
       }
       'apps': {
         path: './apps/${environmentName}'
         syncIntervalInSeconds: 120
+        force: true
+        prune: true
+        retryIntervalInSeconds: 30
+        timeoutInSeconds: 240
         dependsOn: [
           'infra'
         ]
