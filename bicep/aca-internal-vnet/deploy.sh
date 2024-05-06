@@ -3,6 +3,7 @@
 LOCATION='australiaeast'
 PREFIX='cbellee'
 RG_NAME="aca-internal-rg"
+ADMIN_USERNAME='localadmin'
 
 # create resource group
 az group create --location $LOCATION --name $RG_NAME
@@ -30,7 +31,8 @@ az deployment group create \
 	--parameters prefix=$PREFIX \
 	--parameters sshKey="$(cat ~/.ssh/id_rsa.pub)" \
 	--parameters imageName=$IMAGE_NAME \
-	--parameters acrName=$ACR_NAME
+	--parameters acrName=$ACR_NAME \
+	--parameters adminUserName=$ADMIN_USERNAME
 
 VM_ID=$(az deployment group show \
 --resource-group $RG_NAME \
@@ -45,7 +47,9 @@ BASTION_NAME=$(az deployment group show \
 APP_FQDN=$(az deployment group show \
 --resource-group $RG_NAME \
 --name 'aca-deployment' \
---query properties.outputs.app1Fqdn.value -o tsv)
+--query properties.outputs.appFqdn.value -o tsv)
+
+echo $APP_FQDN
 
 # create SSH session to VM via Bastion
 az network bastion ssh \
@@ -53,9 +57,5 @@ az network bastion ssh \
 	--name $BASTION_NAME \
 	--target-resource-id $VM_ID \
 	--auth-type ssh-key \
-	--username localadmin \
+	--username $ADMIN_USERNAME \
 	--ssh-key ~/.ssh/id_rsa
-
-# in SSH session run the following commands
-# nslookup $APP_FQDN
-# curl https://$APP_FQDN

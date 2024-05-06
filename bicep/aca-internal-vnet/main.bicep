@@ -4,7 +4,7 @@ param acrName string
 param imageName string
 param sshKey string
 param colour string = 'blue'
-param adminUserName string = 'localadmin'
+param adminUserName string
 param addressPrefixes array = ['10.0.0.0/16']
 param subnets array = [
   {

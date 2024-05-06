@@ -68,6 +68,29 @@ resource containerApp 'Microsoft.App/containerApps@2023-11-02-preview' = {
               value: location
             }
           ]
+          probes: [
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/livez'
+                port: targetPort
+              }
+            }
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/healthz'
+                port: targetPort
+              }
+            }
+            {
+              type: 'Startup'
+              httpGet: {
+                path: '/startupz'
+                port: targetPort
+              }
+            }
+          ]
         }
       ]
       scale: {
