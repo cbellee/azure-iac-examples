@@ -4,10 +4,10 @@ param tags object
 param aksVersion string = '1.23.3'
 param vmSku string = 'Standard_D4ds_v5'
 param addressPrefix string
-param subnets array
 param sshPublicKey string
 param userName string = 'localadmin'
 param dnsPrefix string
+param isIstioEnabled bool = false
 
 var suffix = uniqueString(resourceGroup().id)
 
@@ -28,7 +28,6 @@ module vnet './modules/vnet.bicep' = {
     tags: tags
     addressPrefix: addressPrefix
     location: location
-    subnets: subnets
   }
 }
 
@@ -53,7 +52,6 @@ module aks './modules/aks.bicep' = {
     logAnalyticsWorkspaceId: wks.outputs.workspaceId
     aksAgentOsDiskSizeGB: 60
     aksDnsServiceIP: '10.100.0.10'
-    aksDockerBridgeCIDR: '172.17.0.1/16'
     aksServiceCIDR: '10.100.0.0/16'
     aksDnsPrefix: dnsPrefix
     aksEnableRBAC: true
@@ -63,6 +61,8 @@ module aks './modules/aks.bicep' = {
     aksNodeVMSize: vmSku
     aksSystemSubnetId: vnet.outputs.subnets[0].id
     aksUserSubnetId: vnet.outputs.subnets[1].id
+    enableIstioServiceMesh: isIstioEnabled
+    istioGatewayMode: 'External'
     aksVersion: aksVersion
     enableAutoScaling: true
     maxPods: 110

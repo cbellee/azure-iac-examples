@@ -44,11 +44,14 @@ param aksServiceCIDR string = '10.100.0.0/16'
 @description('Containers DNS server IP address.')
 param aksDnsServiceIP string = '10.100.0.10'
 
-@description('A CIDR notation IP for Docker bridge.')
-param aksDockerBridgeCIDR string = '172.17.0.1/16'
-
 @description('Enable RBAC on the AKS cluster.')
 param aksEnableRBAC bool = true
+
+@allowed([
+  'Internal'
+  'External'
+])
+param istioGatewayMode string = 'External'
 
 param logAnalyticsWorkspaceId string
 param enableAutoScaling bool = true
@@ -62,11 +65,29 @@ param enablePodSecurityPolicy bool = false
 param enablePrivateCluster bool = false
 param linuxAdminUserName string
 param sshPublicKey string
+param enableIstioServiceMesh bool = false
+
+var serviceMeshConfig = {
+  mode: 'Istio'
+  istio: {
+    revisions: [
+     'asm-1-20'   
+    ]
+    components: {
+      ingressGateways: [
+        {
+          enabled: true
+          mode: istioGatewayMode
+        }
+      ]
+    }
+  }
+}
 
 var aksClusterName = 'aks-${suffix}'
 var aksClusterId = aksCluster.id
 
-resource aksCluster 'Microsoft.ContainerService/managedClusters@2021-03-01' = {
+resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-03-02-preview' = {
   name: aksClusterName
   location: location
   identity: {
@@ -135,12 +156,13 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2021-03-01' = {
         tags: tags
       }
     ]
+    serviceMeshProfile: enableIstioServiceMesh ? serviceMeshConfig : null
     networkProfile: {
       networkPlugin: networkPlugin
       serviceCidr: aksServiceCIDR
       dnsServiceIP: aksDnsServiceIP
-      dockerBridgeCidr: aksDockerBridgeCIDR
       loadBalancerSku: 'standard'
+      networkPluginMode: 'overlay'
     }
     aadProfile: {
       managed: true
@@ -153,7 +175,7 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2021-03-01' = {
   }
 }
 
-resource aksDiagnostics 'Microsoft.Insights/diagnosticSettings@2017-05-01-preview' = {
+resource aksDiagnostics 'Microsoft.Insights/diagnosticSettings@2021-05-01-preview' = {
   scope: aksCluster
   name: 'aksDiagnosticSettings'
   properties: {
@@ -162,68 +184,44 @@ resource aksDiagnostics 'Microsoft.Insights/diagnosticSettings@2017-05-01-previe
       {
         category: 'kube-apiserver'
         enabled: true
-        retentionPolicy: {
-          days: 7
-          enabled: true
-        }
+        
       }
       {
         category: 'kube-audit'
         enabled: true
-        retentionPolicy: {
-          days: 7
-          enabled: true
-        }
+        
       }
       {
         category: 'kube-audit-admin'
         enabled: true
-        retentionPolicy: {
-          days: 7
-          enabled: true
-        }
+        
       }
       {
         category: 'kube-controller-manager'
         enabled: true
-        retentionPolicy: {
-          days: 7
-          enabled: true
-        }
+        
       }
       {
         category: 'kube-scheduler'
         enabled: true
-        retentionPolicy: {
-          days: 7
-          enabled: true
-        }
+        
       }
       {
         category: 'cluster-autoscaler'
         enabled: true
-        retentionPolicy: {
-          days: 7
-          enabled: true
-        }
+        
       }
       {
         category: 'guard'
         enabled: true
-        retentionPolicy: {
-          days: 7
-          enabled: true
-        }
+        
       }
     ]
     metrics: [
       {
         category: 'AllMetrics'
         enabled: true
-        retentionPolicy: {
-          days: 7
-          enabled: true
-        }
+        
       }
     ]
   }

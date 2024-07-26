@@ -6,12 +6,13 @@ UMID_NAME='dev-ado-umid'
 VMSS_IMAGE_NAME='Ubuntu2204'
 ADO_PROJECT_NAME='Terraform AKS Federated Identity'
 ADO_SERVICE_CONNECTION_NAME='tf-aks-ado-service-cxn-2'
-SUBSCRIPTION_ID="b2375b5f-8dab-4436-b87c-32bc7fdce5d0"
+SUBSCRIPTION_ID='21f3cc5d-605c-4b38-8d29-4add56f2f8be'
 SUBSCRIPTION_NAME=$(az account show --query name -o tsv)
 TENANT_ID=$(az account show --query tenantId -o tsv)
 BACKEND_STORAGE_ACCOUNT_RG='tf-state-rg'
 STORAGE_ACCOUNT_NAME='tfstatestorcbellee452023'
 AAD_AKS_ADMIN_GROUP_ID=$(az ad group show -g aks-admin-group --query id -o tsv)
+VM_SKU='Standard_B2s'
 
 # add these vars to ./env file before running this script
 # AAD_AKS_ADMIN_GROUP_ID=<your AAD group Object Id>
@@ -24,7 +25,7 @@ ISSUER="https://vstoken.dev.azure.com/$ADO_ORG_ID"
 SUBJECT="sc://kainidev/$ADO_PROJECT_NAME/$ADO_SERVICE_CONNECTION_NAME"
 AUDIENCE='api://AzureADTokenExchange'
 
-az login
+az login -t $TENANT_ID
 az account set -s $SUBSCRIPTION_ID
 az group create --name $RG_NAME --location $LOCATION
 
@@ -110,7 +111,7 @@ az aks create \
     --enable-workload-identity \
     --enable-oidc-issuer \
     --disable-local-accounts \
-    --node-vm-size Standard_D4ads_v5 \
+    --node-vm-size $VM_SKU \
     --node-osdisk-size 100 \
     --enable-aad \
     --enable-azure-rbac \
@@ -148,7 +149,7 @@ az vmss create \
     --name $POOL_NAME \
     --resource-group $RG_NAME \
     --image $VMSS_IMAGE_NAME \
-    --vm-sku Standard_D4ads_v5 \
+    --vm-sku $VM_SKU \
     --storage-sku StandardSSD_LRS \
     --subnet $VMSS_SUBNET_ID \
     --admin-username localadmin \

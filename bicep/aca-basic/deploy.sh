@@ -1,7 +1,9 @@
 LOCATION='australiaeast'
 PREFIX='cbellee'
 RG_NAME="aca-test-rg"
-CURRENT_USER=$($(az ad signed-in-user show --query id -o tsv))
+IMAGE_NAME='envvars'
+IMAGE_VERSION='latest'
+PORT=8080
 
 # create resource group
 az group create --location $LOCATION --name $RG_NAME
@@ -13,14 +15,10 @@ ACR_NAME=$(az acr create \
     --sku Standard \
     --query name -o tsv)
 
-docker pull nginx:latest
+docker build . -t $ACR_NAME.azurecr.io/$IMAGE_NAME:$IMAGE_VERSION
+# docker pull nginx:latest
 az acr login --name $ACR_NAME
-
-# create role assignments
-az role assignment create --assignee $CURRENT_USER --role acrpull --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RG_NAME/providers/Microsoft.ContainerRegistry/registries/$ACR_NAME
-az role assignment create --assignee $CURRENT_USER --role acrpush --scope /subscriptions/$(az account show --query id -o tsv)/resourceGroups/$RG_NAME/providers/Microsoft.ContainerRegistry/registries/$ACR_NAME
-
-az acr import --name $ACR_NAME -g $RG_NAME --source docker.io/library/nginx:latest --image nginx:latest --verbose
+docker push $ACR_NAME.azurecr.io/$IMAGE_NAME:$IMAGE_VERSION
 
 # deploy infrastructure
 az deployment group create \
@@ -30,6 +28,6 @@ az deployment group create \
     --parameters location=$LOCATION \
     --parameters acrName=$ACR_NAME \
     --parameters prefix=$PREFIX \
-    --parameters containerImageName='nginx' \
-    --parameters containerImageTag='latest' \
-    --parameters secretValue='test'
+    --parameters port=$PORT \
+    --parameters containerImageName=$IMAGE_NAME \
+    --parameters containerImageTag=$IMAGE_VERSION

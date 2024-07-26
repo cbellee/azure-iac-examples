@@ -5,9 +5,10 @@ RG_NAME="aks-basic-rg"
 DNS_RG='external-dns-zones-rg'
 DOMAIN='kainiindustries.net'
 RECORD_NAME='azure-vote-front'
-AKS_VERSION='1.27.3'
+AKS_VERSION=$(az aks get-versions -l australiaeast | jq .values[0].version -r)
 KEY_PATH='./certs/star_kainiindustries_net.key'
 CERT_PATH='./certs/star_kainiindustries_net.crt'
+ADMIN_GROUP_OBJECT_ID='c84cef69-ff8e-4906-82e1-c16f16081952'
 
 az group create --location $LOCATION --name $RG_NAME
 
@@ -18,13 +19,14 @@ az deployment group create \
     --parameters @main.parameters.json \
     --parameters location=$LOCATION \
     --parameters sshPublicKey="$SSH_KEY" \
-    --parameters adminGroupObjectID=$ADMIN_GROUP_OBJECT_ID \
     --parameters aksVersion=$AKS_VERSION \
-    --parameters dnsPrefix='aks-basic'
+    --parameters dnsPrefix='aks-basic' \
+    --parameters isIstioEnabled=true \
+    --parameters adminGroupObjectID=$ADMIN_GROUP_OBJECT_ID
 
 CLUSTER_NAME=$(az deployment group show --resource-group $RG_NAME --name aks-deployment --query 'properties.outputs.aksClusterName.value' -o tsv)
 
-az aks get-credentials -g $RG_NAME -n $CLUSTER_NAME --admin --context 'aks-basic' --admin --overwrite-existing
+az aks get-credentials -g $RG_NAME -n $CLUSTER_NAME --admin --context 'aks-basic' --overwrite-existing
 
 # install istio
 # get binary
