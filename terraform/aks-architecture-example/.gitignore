@@ -1,5 +1,4 @@
-terraform/.terraform
-**/.terraform
+.terraform/
 terraform.local.hcl
 terraform.tfstate.lock.info
 terraform.tfstate
