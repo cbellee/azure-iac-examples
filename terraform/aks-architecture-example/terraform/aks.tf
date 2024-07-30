@@ -9,16 +9,6 @@ resource azurerm_kubernetes_cluster "nonprod_cluster" {
   private_cluster_enabled = true
   node_resource_group     = "${var.prefix}-nonprod-aks-node-rg"
 
-  addon_profile {
-    oms_agent {
-      enabled                    = true
-      log_analytics_workspace_id = azurerm_log_analytics_workspace.workspace.id
-    }
-    azure_policy {
-      enabled = true
-    }
-  }
-
   linux_profile {
     admin_username = var.admin_user_name
     ssh_key {
@@ -27,10 +17,9 @@ resource azurerm_kubernetes_cluster "nonprod_cluster" {
   }
 
   network_profile {
-    load_balancer_sku  = "Standard"
+    load_balancer_sku  = "standard"
     network_plugin     = "azure"
     dns_service_ip     = "10.100.1.10"
-    docker_bridge_cidr = "172.17.0.1/16"
     service_cidr       = "10.100.1.0/24"
     outbound_type      = "userDefinedRouting"
   }
@@ -53,14 +42,6 @@ resource azurerm_kubernetes_cluster "nonprod_cluster" {
     type = "SystemAssigned"
   }
 
-  role_based_access_control {
-    azure_active_directory {
-      managed = true
-      admin_group_object_ids = var.aks_admin_group_object_ids
-    }
-    enabled = true
-  }
-
   tags = var.tags
 
   depends_on = [
@@ -79,16 +60,6 @@ resource azurerm_kubernetes_cluster "prod_cluster" {
   private_cluster_enabled = true
   node_resource_group     = "${var.prefix}-prod-aks-node-rg"
 
-  addon_profile {
-    oms_agent {
-      enabled                    = true
-      log_analytics_workspace_id = azurerm_log_analytics_workspace.workspace.id
-    }
-    azure_policy {
-      enabled = true
-    }
-  }
-
   linux_profile {
     admin_username = var.admin_user_name
     ssh_key {
@@ -97,10 +68,9 @@ resource azurerm_kubernetes_cluster "prod_cluster" {
   }
 
   network_profile {
-    load_balancer_sku  = "Standard"
+    load_balancer_sku  = "standard"
     network_plugin     = "azure"
     dns_service_ip     = "10.100.1.10"
-    docker_bridge_cidr = "172.17.0.1/16"
     service_cidr       = "10.100.1.0/24"
     outbound_type      = "userDefinedRouting"
   }
@@ -121,14 +91,6 @@ resource azurerm_kubernetes_cluster "prod_cluster" {
 
   identity {
     type = "SystemAssigned"
-  }
-
-  role_based_access_control {
-    azure_active_directory {
-      managed = true
-      admin_group_object_ids = var.aks_admin_group_object_ids
-    }
-    enabled = true
   }
 
   tags = var.tags

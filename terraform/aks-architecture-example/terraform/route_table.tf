@@ -7,7 +7,6 @@ resource azurerm_route_table "firewall_route_table" {
   name                = local.rt_name
   location            = azurerm_resource_group.rg["network-rg"].location
   resource_group_name = azurerm_resource_group.rg["network-rg"].name
-  disable_bgp_route_propagation = false
 
   route {
     name                   = "default_hub_fw_route"
@@ -23,7 +22,6 @@ resource azurerm_route_table "aks_firewall_route_table" {
   name                = local.aks_rt_name
   location            = azurerm_resource_group.rg["network-rg"].location
   resource_group_name = azurerm_resource_group.rg["network-rg"].name
-  disable_bgp_route_propagation = false
 
   route {
     name                   = "default_spoke_fw_route"

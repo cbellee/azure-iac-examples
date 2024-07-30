@@ -15,6 +15,8 @@ resource azurerm_public_ip "az_firewall_pip" {
 
 resource azurerm_firewall "az_firewall" {
   name                = local.fw_name
+  sku_name = "AZFW_VNet"
+  sku_tier = "Standard"
   location            = azurerm_resource_group.rg["network-rg"].location
   resource_group_name = azurerm_resource_group.rg["network-rg"].name
 
