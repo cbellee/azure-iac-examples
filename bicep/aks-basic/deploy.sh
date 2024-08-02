@@ -72,6 +72,11 @@ spec:
                 number: 9898
 EOF
 
+# add the following DNS records to your owned Domain
+# A: apps.<domain> -> <Ingress Controller Public IP>
+# CNAME: podinfo.apps -> apps.<domain>
+# CNAME: azure-vote.apps -> apps.<domain>
+
 # test ingress
 curl http://podinfo.apps.kainiindustries.net
 curl http://azure-vote.apps.kainiindustries.net
