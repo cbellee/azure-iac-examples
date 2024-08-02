@@ -20,7 +20,6 @@ resource azurerm_kubernetes_cluster "nonprod_cluster" {
     load_balancer_sku  = "standard"
     network_plugin     = "azure"
     dns_service_ip     = "10.100.1.10"
-    service_cidr       = "10.100.1.0/24"
     outbound_type      = "userDefinedRouting"
   }
 
@@ -71,7 +70,6 @@ resource azurerm_kubernetes_cluster "prod_cluster" {
     load_balancer_sku  = "standard"
     network_plugin     = "azure"
     dns_service_ip     = "10.100.1.10"
-    service_cidr       = "10.100.1.0/24"
     outbound_type      = "userDefinedRouting"
   }
 
