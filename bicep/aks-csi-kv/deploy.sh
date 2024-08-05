@@ -1,14 +1,13 @@
 LOCATION='australiaeast'
 SSH_KEY=$(cat ~/.ssh/id_rsa.pub)
 export TENANT_ID=$(az account show --query tenantId -o tsv)
-ADMIN_GROUP_OBJECT_ID="f6a900e2-df11-43e7-ba3e-22be99d3cede"
-LATEST_K8S_VERSION_IN_REGION=$(az aks get-versions -l $LOCATION | jq -r -c '[.orchestrators[] | .orchestratorVersion][-1]')
+ADMIN_GROUP_OBJECT_ID="9a9ebfda-180c-4957-b9ce-2e2fbfbd2a0f"
+SERVICE_ACCOUNT_NAMESPACE='demo'
+SERVICE_ACCOUNT_NAME='busybox-wi-sa'
 PREFIX=csidriver
 export RG_NAME="aks-${PREFIX}-rg"
-
-# download & install yq to replace yaml template file values
-# wget https://github.com/mikefarah/yq/releases/download/v4.25.3/yq_linux_arm64
-# cp ./yq_linux_arm64 /usr/local/bin/yq
+export SECRET_NAME='secret1'
+export SECRET_VALUE='this is a secret'
 
 az group create --location $LOCATION --name $RG_NAME
 
@@ -20,80 +19,118 @@ az deployment group create \
     --parameters prefix=$PREFIX \
     --parameters sshPublicKey="$SSH_KEY" \
     --parameters adminGroupObjectID=$ADMIN_GROUP_OBJECT_ID \
-    --parameters aksVersion=$LATEST_K8S_VERSION_IN_REGION
+    --parameters aksVersion='1.30.0' \
+    --parameters secretName=$SECRET_NAME \
+    --parameters secretValue=$SECRET_VALUE
 
-CLUSTER_NAME=$(az deployment group show --resource-group $RG_NAME --name aks-deployment --query 'properties.outputs.aksClusterName.value' -o tsv)
+export CLUSTER_NAME=$(az deployment group show --resource-group $RG_NAME --name aks-deployment --query 'properties.outputs.aksClusterName.value' -o tsv)
+export KV_ID=$(az deployment group show --resource-group $RG_NAME --name aks-deployment --query 'properties.outputs.keyVaultId.value' -o tsv)
+export KV_NAME=$(az deployment group show --resource-group $RG_NAME --name aks-deployment --query properties.outputs.keyVaultName.value -o tsv)
+export KV_CSI_IDENTITY_CLIENT_ID=$(az aks show -g $RG_NAME -n $CLUSTER_NAME --query addonProfiles.azureKeyvaultSecretsProvider.identity.clientId -o tsv)
+export KV_CSI_IDENTITY_RESOURCE_ID=$(az aks show -g $RG_NAME -n $CLUSTER_NAME --query addonProfiles.azureKeyvaultSecretsProvider.identity.resourceId -o tsv)
+export AKS_NODE_RG_NAME=$(az aks show -g $RG_NAME -n $CLUSTER_NAME --query nodeResourceGroup -o tsv)
 
+# add kv admin role to csi identity
+az role assignment create \
+    --role 'Key Vault Administrator' \
+    --assignee $KV_CSI_IDENTITY_CLIENT_ID \
+    --scope $KV_ID
+
+# get cluster credentials
 az aks get-credentials -g $RG_NAME -n $CLUSTER_NAME --admin
 
-#########################################
-# install CSI driver & configure 
-# User Managed Identities & test pods
-#########################################
+# grant the runner of this script access to the key vault
+az role assignment create \
+    --role 'Key Vault Administrator' \
+    --assignee $KV_CSI_IDENTITY_CLIENT_ID \
+    --scope $KEYVAULT_SCOPE
 
-export DEV_KV=$(az deployment group show --resource-group $RG_NAME --name aks-deployment --query properties.outputs.devKeyVaultName.value -o tsv)
-export UAT_KV=$(az deployment group show --resource-group $RG_NAME --name aks-deployment --query properties.outputs.uatKeyVaultName.value -o tsv)
+# create secret provider class
+kubectl create namespace $SERVICE_ACCOUNT_NAMESPACE
 
-# create namespaces
-kubectl create ns dev
-kubectl create ns uat
+cat <<EOF | kubectl apply -n $SERVICE_ACCOUNT_NAMESPACE -f -
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: azure-kvname-wi # needs to be unique per namespace
+spec:
+  provider: azure
+  secretObjects:
+  - data:
+    - key: secretkey1
+      objectName: ${SECRET_NAME}
+    secretName: k8ssecret1
+    type: Opaque
+  parameters:
+    usePodIdentity: "false"
+    clientID: "${KV_CSI_IDENTITY_CLIENT_ID}" # Setting this to use workload identity
+    keyvaultName: ${KV_NAME}       # Set to the name of your key vault
+    cloudName: ""                         # [OPTIONAL for Azure] if not provided, the Azure environment defaults to AzurePublicCloud
+    objects:  |
+      array:
+        - |
+          objectName: ${SECRET_NAME}            # Set to the name of your secret
+          objectType: secret              # object types: secret, key, or cert
+          objectVersion: ""               # [OPTIONAL] object versions, default to latest if empty
+    tenantId: "${TENANT_ID}"        # The tenant ID of the key vault
+EOF
 
-# enable the 'azure keyvault secrets provider' addon
-az aks enable-addons --addons azure-keyvault-secrets-provider --name $CLUSTER_NAME --resource-group $RG_NAME
+export KV_CSI_IDENTITY_RESOURCE_NAME=$(az identity show --ids $KV_CSI_IDENTITY_RESOURCE_ID --query name -o tsv)
+export AKS_OIDC_ISSUER="$(az aks show -n $CLUSTER_NAME -g $RG_NAME --query "oidcIssuerProfile.issuerUrl" -o tsv)"
 
-# get the AKS node pools (VMSS)
-NODE_RESOURCE_GROUP=$(az aks show -g $RG_NAME --name $CLUSTER_NAME --query nodeResourceGroup -o tsv)
-USER_VMSS=$(az vmss list -g $NODE_RESOURCE_GROUP --query '[].name | [0]' -o tsv)
-SYSTEM_VMSS=$(az vmss list -g $NODE_RESOURCE_GROUP --query '[].name | [1]' -o tsv)
+az identity federated-credential create --name 'kv-csi-identity-federation' \
+  --identity-name $KV_CSI_IDENTITY_RESOURCE_NAME \
+  --resource-group $AKS_NODE_RG_NAME \
+  --issuer $AKS_OIDC_ISSUER \
+  --subject "system:serviceaccount:$SERVICE_ACCOUNT_NAMESPACE:$SERVICE_ACCOUNT_NAME" \
+  --audiences api://AzureADTokenExchange
 
-# create User Managed Identities for each keyvault and assign to each AKS VMSS (nodepool)
-DEV_UMID=$(az identity create -g $RG_NAME -n 'dev-kv-umid' --query id -o tsv)
-UAT_UMID=$(az identity create -g $RG_NAME -n 'uat-kv-umid' --query id -o tsv)
+cat <<EOF | kubectl apply -n $SERVICE_ACCOUNT_NAMESPACE -f -
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    azure.workload.identity/client-id: ${KV_CSI_IDENTITY_RESOURCE_ID}
+  name: ${SERVICE_ACCOUNT_NAME}
+  namespace: ${SERVICE_ACCOUNT_NAMESPACE}
+EOF
 
-az vmss identity assign -g $NODE_RESOURCE_GROUP -n $USER_VMSS --identities $DEV_UMID
-az vmss identity assign -g $NODE_RESOURCE_GROUP -n $SYSTEM_VMSS --identities $DEV_UMID
+# create pod & service
+cat <<EOF | kubectl apply -n $SERVICE_ACCOUNT_NAMESPACE -f -
+kind: Pod
+apiVersion: v1
+metadata:
+  name: busybox-secrets-store-inline-wi
+  labels:
+    azure.workload.identity/use: "true"
+spec:
+  serviceAccountName: $SERVICE_ACCOUNT_NAME
+  containers:
+    - name: busybox
+      image: registry.k8s.io/e2e-test-images/busybox:1.29-4
+      command:
+        - "/bin/sleep"
+        - "10000"
+      volumeMounts:
+      - name: secrets-store01-inline
+        mountPath: "/mnt/secrets-store"
+        readOnly: true
+      env:
+      - name: MY_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: k8ssecret1
+            key: secretkey1
+  volumes:
+    - name: secrets-store01-inline
+      csi:
+        driver: secrets-store.csi.k8s.io
+        readOnly: true
+        volumeAttributes:
+          secretProviderClass: "azure-kvname-wi"
+EOF
 
-az vmss identity assign -g $NODE_RESOURCE_GROUP -n $USER_VMSS --identities $UAT_UMID
-az vmss identity assign -g $NODE_RESOURCE_GROUP -n $SYSTEM_VMSS --identities $UAT_UMID
-
-# update VMSS instances
-az vmss update-instances -g $NODE_RESOURCE_GROUP -n $USER_VMSS --instance-ids "*"
-az vmss update-instances -g $NODE_RESOURCE_GROUP -n $SYSTEM_VMSS --instance-ids "*"
-
-# set keyvault access policy to access to keyvault secrets
-export DEV_APPID=$(az identity show -g $RG_NAME -n 'dev-kv-umid' --query clientId -o tsv)
-az keyvault set-policy -n $DEV_KV --secret-permissions get --spn $DEV_APPID
-az keyvault set-policy -n $DEV_KV --secret-permissions all --object-id $(az ad signed-in-user show --query objectId -o tsv)
-
-export UAT_APPID=$(az identity show -g $RG_NAME -n 'uat-kv-umid' --query clientId -o tsv)
-az keyvault set-policy -n $UAT_KV --secret-permissions get --spn $UAT_APPID
-az keyvault set-policy -n $UAT_KV --secret-permissions all --object-id $(az ad signed-in-user show --query objectId -o tsv)
-
-# add secrets to the keyvaults
-az keyvault secret set --vault-name $DEV_KV --name my-secret --value "this secret is from 'dev' key vault"
-az keyvault secret set --vault-name $UAT_KV --name my-secret --value "this secret is from 'uat' key vault" 
-
-# create dev-secret-provider.yaml & uat-secret-provider.yaml manifests
-yq e '(.metadata.name = "azure-dev-msi") | (.metadata.namespace = "dev") | (.spec.parameters.tenantId = strenv(TENANT_ID)) | (.spec.parameters.userAssignedIdentityID = strenv(DEV_APPID)) | (.spec.parameters.keyvaultName = strenv(DEV_KV))' ./manifests/secret-provider-template.yaml > ./manifests/dev-secret-provider.yaml
-yq e '(.metadata.name = "azure-uat-msi") | (.metadata.namespace = "uat") | (.spec.parameters.tenantId = strenv(TENANT_ID)) | (.spec.parameters.userAssignedIdentityID = strenv(UAT_APPID)) | (.spec.parameters.keyvaultName = strenv(UAT_KV))' ./manifests/secret-provider-template.yaml > ./manifests/uat-secret-provider.yaml
-
-# create dev-spod.yaml & uat-pod.yaml manifests
-yq e '(.metadata.name = "busybox-dev-user-msi") | (.metadata.namespace = "dev") | (.spec.volumes[0].csi.volumeAttributes.secretProviderClass = "azure-dev-msi")' ./manifests/pod-template.yaml > ./manifests/dev-pod.yaml
-yq e '(.metadata.name = "busybox-uat-user-msi") | (.metadata.namespace = "uat") | (.spec.volumes[0].csi.volumeAttributes.secretProviderClass = "azure-uat-msi")' ./manifests/pod-template.yaml > ./manifests/uat-pod.yaml
-
-kubectl apply -f ./manifests/dev-secret-provider.yaml
-kubectl apply -f ./manifests/uat-secret-provider.yaml
-kubectl apply -f ./manifests/dev-pod.yaml
-kubectl apply -f ./manifests/uat-pod.yaml
-
-#### exec into 'dev' container
-# kubectl exec -it busybox-dev-user-msi -n dev -c busybox /bin/sh
-
-#### run cmd within dev-pod to print secret
-# cat /mnt/secrets-store/my-secret 
-
-#### exec into 'uat' container
-# kubectl exec -it busybox-uat-user-msi -n uat -c busybox /bin/sh
-
-# run cmd within uat-pod to print secret
-# cat /mnt/secrets-store/my-secret 
+# exec inside pod
+k exec -it -n demo busybox-secrets-store-inline-wi  -- sh
+# read env var containing secret value
+# echo $MY_SECRFET

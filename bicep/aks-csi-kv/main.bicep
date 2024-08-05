@@ -2,11 +2,15 @@ param location string
 param adminGroupObjectID string
 param tags object
 param prefix string
-param aksVersion string = '1.23.3'
+param aksVersion string = '1.30.0'
 param vmSku string = 'Standard_F8s_v2'
 param addressPrefix string
 param subnets array
 param sshPublicKey string
+param secretName string
+
+@secure()
+param secretValue string
 
 module wks './modules/wks.bicep' = {
   name: 'wksDeploy'
@@ -18,23 +22,18 @@ module wks './modules/wks.bicep' = {
   }
 }
 
-module devKeyvault 'modules/kv.bicep' = {
-  name: 'devKvDeploy'
+module keyVault 'modules/kv.bicep' = {
+  name: 'kvDeploy'
   params: {
     location: location
     name: 'dev'
     tenantId: tenant().tenantId
+    secretName: secretName
+    secretValue: secretValue
   }
 }
 
-module uatKeyvault 'modules/kv.bicep' = {
-  name: 'uatKvDeploy'
-  params: {
-    location: location
-    name: 'uat'
-    tenantId: tenant().tenantId
-  }
-}
+
 
 module vnet './modules/vnet.bicep' = {
   name: 'vnetDeploy'
@@ -69,7 +68,6 @@ module aks './modules/aks.bicep' = {
     aksDnsPrefix: prefix
     aksAgentOsDiskSizeGB: 60
     aksDnsServiceIP: '10.100.0.10'
-    aksDockerBridgeCIDR: '172.17.0.1/16'
     aksEnableRBAC: true
     aksMaxNodeCount: 10
     aksMinNodeCount: 1
@@ -78,7 +76,10 @@ module aks './modules/aks.bicep' = {
     aksServiceCIDR: '10.100.0.0/16'
     aksSystemSubnetId: vnet.outputs.subnets[0].id
     aksUserSubnetId: vnet.outputs.subnets[1].id
-    aksVersion: aksVersion
+    k8sVersion: aksVersion
+    vnetName: vnet.outputs.name
+    enableOIDCIssuer: true
+    enableWorkloadIdentity: true
     enableAutoScaling: true
     maxPods: 110
     networkPlugin: 'azure'
@@ -89,6 +90,13 @@ module aks './modules/aks.bicep' = {
     sshPublicKey: sshPublicKey
     adminGroupObjectID: adminGroupObjectID
     addOns: {
+      azureKeyvaultSecretsProvider: {
+        enabled: true
+        config: {
+          enableSecretRotation: 'true'
+          rotationPollInterval: '2m'
+        }
+      }
       azurepolicy: {
         enabled: true
         config: {
@@ -105,8 +113,6 @@ module aks './modules/aks.bicep' = {
   }
 }
 
-output aksClusterName string = aks.outputs.aksClusterName
-output aksClusterFqdn string = aks.outputs.aksControlPlaneFQDN
-output aksClusterApiServerUri string = aks.outputs.aksApiServerUri
-output devKeyVaultName string = devKeyvault.outputs.keyVaultName
-output uatKeyVaultName string = uatKeyvault.outputs.keyVaultName
+output aksClusterName string = aks.outputs.name
+output keyVaultName string = keyVault.outputs.keyVaultName
+output keyVaultId string = keyVault.outputs.keyVaultId

@@ -7,11 +7,11 @@ param retentionInDays int = 30
   'Standard'
   'PerGB2018'
 ])
-param sku string = 'Standard'
+param sku string = 'PerGB2018'
 
 var workspaceName = '${prefix}-${uniqueString(resourceGroup().id)}-wks'
 
-resource azureMonitorWorkspace 'Microsoft.OperationalInsights/workspaces@2021-06-01' = {
+resource azureMonitorWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   location: location
   name: workspaceName
   tags: tags

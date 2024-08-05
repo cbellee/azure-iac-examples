@@ -1,11 +1,15 @@
 param tenantId string
 param location string
 param name string 
+param secretName string
+
+@secure()
+param secretValue string
 
 var suffix = uniqueString(resourceGroup().id) 
 var kvName = '${name}-${suffix}'
 
-resource keyVault 'Microsoft.KeyVault/vaults@2021-04-01-preview' = {
+resource keyVault 'Microsoft.KeyVault/vaults@2024-04-01-preview' = {
   name: kvName
   location: location
   tags: {
@@ -15,13 +19,21 @@ resource keyVault 'Microsoft.KeyVault/vaults@2021-04-01-preview' = {
     enabledForDeployment: true
     enabledForTemplateDeployment: true
     enabledForDiskEncryption: true
+    enableRbacAuthorization: true
     createMode: 'default'
     tenantId: tenantId
-    accessPolicies: []
     sku: {
       name: 'standard'
       family: 'A'
     }
+  }
+}
+
+resource secret 'Microsoft.KeyVault/vaults/secrets@2024-04-01-preview' = {
+  parent: keyVault
+  name: secretName
+  properties: {
+    value: secretValue
   }
 }
 

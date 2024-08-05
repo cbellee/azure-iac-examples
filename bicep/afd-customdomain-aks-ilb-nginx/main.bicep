@@ -11,7 +11,6 @@ param dnsPrefix string
 param prefix string
 
 var affix = uniqueString(resourceGroup().id)
-var azureMonitorWorkspaceName = 'azmon-${affix}'
 var virtualNetworkName = 'vnet-${affix}'
 var azureContainerRegistryName = 'acr${affix}'
 var bastionName = 'bast-${affix}'
@@ -27,7 +26,7 @@ module azMonitorWorkspace 'modules/azureMonitor.bicep' = {
 module vnet './modules/vnet.bicep' = {
   name: 'vnet-module'
   params: {
-    name: virtualNetworkName
+    prefix: prefix
     tags: tags
     addressPrefix: addressPrefix
     location: location
@@ -39,7 +38,10 @@ module azureContainerRegistry './modules/acr.bicep' = {
   name: 'acr-module'
   params: {
     location: location
-    name: azureContainerRegistryName
+    prefix: prefix
+    isAdminUserEnabled: false
+    isAnonymousPullEnabled: false
+    isPublicNetworkAccessEnabled: 'Enabled'
     tags: tags
   }
 }
@@ -52,7 +54,7 @@ module aks './modules/aks.bicep' = {
   ]
   params: {
     location: location
-    affix: affix
+    prefix: prefix
     vnetName: vnet.outputs.vnetName
     logAnalyticsWorkspaceId: azMonitorWorkspace.outputs.workspaceId
     aksAgentOsDiskSizeGB: 60
@@ -105,6 +107,7 @@ module vm 'modules/vm.bicep' = {
   params: {
     location: location
     sshKey: sshPublicKey
+    prefix: prefix
     subnetId: vnet.outputs.subnets[3].id
   }
 }
@@ -112,13 +115,11 @@ module vm 'modules/vm.bicep' = {
 module bastion 'modules/bastion.bicep' = {
   name: 'bastion-module'
   params: {
-    name: bastionName
+    prefix: prefix
     location: location
     subnetId: vnet.outputs.subnets[5].id
   }
 }
 
-output aksClusterName string = aks.outputs.aksClusterName
-output aksClusterFqdn string = aks.outputs.aksControlPlaneFQDN
-output aksClusterApiServerUri string = aks.outputs.aksApiServerUri
+output aksClusterName string = aks.outputs.name
 output bastionName string = bastion.outputs.name

@@ -3,7 +3,7 @@ param tags object
 param prefix string 
 var acrName = '${prefix}acr${uniqueString(resourceGroup().id)}'
 
-resource acr 'Microsoft.ContainerRegistry/registries@2020-11-01-preview' = {
+resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
   name: acrName
   location: location
   tags: tags
@@ -17,5 +17,4 @@ resource acr 'Microsoft.ContainerRegistry/registries@2020-11-01-preview' = {
 
 output registryName string = acrName
 output registryServer string = acr.properties.loginServer
-output registryPassword string = listCredentials(acr.id, '2020-11-01-preview').passwords[0].value
 output registryResourceId string = acr.id
