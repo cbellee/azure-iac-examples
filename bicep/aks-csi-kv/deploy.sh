@@ -133,4 +133,4 @@ EOF
 # exec inside pod
 k exec -it -n demo busybox-secrets-store-inline-wi  -- sh
 # read env var containing secret value
-# echo $MY_SECRFET
+# echo $MY_SECRET

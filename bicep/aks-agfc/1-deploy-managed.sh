@@ -1,12 +1,12 @@
 # Login to your Azure subscription.
 LOCATION="australiaeast"
 LOCATION_SHORT="aue"
-AKS_NAME="aks-agc"
+AKS_NAME="aks-agc-managed"
 RESOURCE_GROUP="$AKS_NAME-rg"
 VM_SIZE='Standard_D4ds_v5'
 IDENTITY_RESOURCE_NAME='azure-alb-identity'
 ALB_NAME='alb-agfc' # Application Gateway for Containers resource name
-ALB_NAMESPACE='agfc'
+ALB_NAMESPACE='agfc' # K8S namespace for ALB resources
 FRONTEND_NAME='alb-frontend'
 ALB_SUBNET_NAME='agc-subnet'
 ASSOCIATION_NAME='agc-association'
@@ -62,7 +62,7 @@ sleep 60
 
 echo "Apply Reader role to the AKS managed cluster resource group for the newly provisioned identity"
 az role assignment create --assignee-object-id $principalId \
-    --resource-group $mcResourceGroup \
+    --scope $mcResourceGroupId \
     --role "acdd72a7-3385-48ef-bd42-f606fba81ae7" # Reader role
 
 echo "Setup federation with AKS OIDC issuer"
@@ -77,14 +77,9 @@ az identity federated-credential create --name $IDENTITY_RESOURCE_NAME \
 # install ALB controller with Helm
 az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_NAME --admin
 
-clientId=`az identity show --resource-group $RESOURCE_GROUP --name $IDENTITY_RESOURCE_NAME --query clientId -o tsv`
-
+clientId=$(az identity show --resource-group $RESOURCE_GROUP --name $IDENTITY_RESOURCE_NAME --query clientId -o tsv)
 helm install alb-controller oci://mcr.microsoft.com/application-lb/charts/alb-controller \
-    --version 0.4.023971 \
-    --set albController.podIdentity.clientID=$clientId
-
-helm upgrade alb-controller oci://mcr.microsoft.com/application-lb/charts/alb-controller \
-    --version 0.5.024341 \
+    --version 1.0.2 \
     --set albController.podIdentity.clientID=$clientId
 
 # verify installation
@@ -92,7 +87,7 @@ kubectl get pods -n azure-alb-system
 kubectl get gatewayclass azure-alb-external -o yaml
 
 # create association resource
-VNET_NAME=`az network vnet list -g $mcResourceGroup --query [].name -o tsv`
+VNET_NAME=$(az network vnet list -g $mcResourceGroup --query [].name -o tsv)
 
 # delegate subnet
 az network vnet subnet create \
@@ -134,4 +129,4 @@ spec:
 EOF
 
 # validate
-kubectl get applicationloadbalancer $ALB_NAME -n $AGFC_NAMESPACE -o yaml
+kubectl get applicationloadbalancer $ALB_NAME -n $ALB_NAMESPACE -o yaml -w

@@ -39,7 +39,7 @@ spec:
         app: echo
     spec:
       containers:
-      - image: gcr.io/k8s-staging-ingressconformance/echoserver:v20220815-e21d1a4
+      - image: gcr.io/k8s-staging-ingressconformance/echoserver:latest
         name: echo
         lifecycle:
           preStop:
